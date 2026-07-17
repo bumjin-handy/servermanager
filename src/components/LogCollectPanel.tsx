@@ -1,0 +1,410 @@
+import { useEffect, useMemo, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import type { Server } from "../types";
+import { api } from "../api";
+
+export type LogCollectOutput = {
+  source: string;
+  /** Display path e.g. `$HOME/logs/20260717145322/bms.log` */
+  outputFile: string;
+  fileName: string;
+  stamp: string;
+};
+
+interface Props {
+  server: Server;
+  collecting: boolean;
+  outputs: LogCollectOutput[];
+  workingDirHint: string | null;
+  status: string | null;
+  error?: boolean;
+  onClose: () => void;
+  onSavePaths: (paths: string[]) => Promise<void>;
+  onStart: (paths: string[]) => Promise<void>;
+  /** Stops collection and returns generated output files (for download prompt). */
+  onStop: () => Promise<LogCollectOutput[]>;
+  onDownload: (outputs: LogCollectOutput[], localDir: string) => Promise<void>;
+  /** When stop was triggered outside the panel (e.g. closing a log pane). */
+  pendingDownload?: LogCollectOutput[] | null;
+  onClearPendingDownload?: () => void;
+}
+
+const PLACEHOLDER = `tomcat/logs/bms.log
+jhoms/logs/jhoms.log
+jhoms./logs/dao.log`;
+
+export function LogCollectPanel({
+  server,
+  collecting,
+  outputs,
+  workingDirHint,
+  status,
+  error,
+  onClose,
+  onSavePaths,
+  onStart,
+  onStop,
+  onDownload,
+  pendingDownload = null,
+  onClearPendingDownload,
+}: Props) {
+  const [text, setText] = useState(server.logCollectPaths?.join("\n") ?? "");
+  const [busy, setBusy] = useState(false);
+  const [downloadAsk, setDownloadAsk] = useState<LogCollectOutput[] | null>(null);
+  const [wantDownload, setWantDownload] = useState(true);
+  const [localSaveDir, setLocalSaveDir] = useState("");
+
+  useEffect(() => {
+    setText(server.logCollectPaths?.join("\n") ?? "");
+  }, [server.id, server.logCollectPaths]);
+
+  useEffect(() => {
+    if (pendingDownload && pendingDownload.length > 0) {
+      setWantDownload(true);
+      setDownloadAsk(pendingDownload);
+      onClearPendingDownload?.();
+    }
+  }, [pendingDownload, onClearPendingDownload]);
+
+  useEffect(() => {
+    if (!downloadAsk) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const home = await api.localHome();
+        if (!cancelled && !localSaveDir) {
+          setLocalSaveDir(`${home.replace(/[/\\]+$/, "")}/logs/${downloadAsk[0]?.stamp ?? ""}`);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when prompt opens
+  }, [downloadAsk]);
+
+  const paths = useMemo(
+    () =>
+      text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean),
+    [text],
+  );
+
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleStop = async () => {
+    setBusy(true);
+    try {
+      const outs = await onStop();
+      if (outs.length > 0) {
+        setWantDownload(true);
+        setLocalSaveDir("");
+        setDownloadAsk(outs);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pickLocalDir = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "로그 저장 폴더 선택",
+      defaultPath: localSaveDir || undefined,
+    });
+    if (typeof selected === "string") {
+      setLocalSaveDir(selected.replace(/\\/g, "/"));
+    }
+  };
+
+  const confirmDownloadAsk = async () => {
+    if (!downloadAsk) return;
+    const outs = downloadAsk;
+    if (!wantDownload) {
+      setDownloadAsk(null);
+      return;
+    }
+
+    let dir = localSaveDir.trim();
+    if (!dir) {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "로그 저장 폴더 선택",
+      });
+      if (typeof selected !== "string") return;
+      dir = selected.replace(/\\/g, "/");
+      setLocalSaveDir(dir);
+    }
+
+    setDownloadAsk(null);
+    setBusy(true);
+    try {
+      await onDownload(outs, dir);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal log-collect-modal"
+        role="dialog"
+        aria-label="로그수집"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h3>로그수집 — {server.name}</h3>
+          <button type="button" className="icon-btn" onClick={onClose} title="닫기">
+            ×
+          </button>
+        </div>
+
+        <div className="modal-body log-collect-body">
+          <p className="log-collect-help">
+            수집할 로그 경로를 한 줄에 하나씩 입력하세요. 수집 시작 시 로그마다 전용 터미널에서
+            <code> tail -f </code>가 <strong>동시에</strong> 실행되며, 결과는
+            <code> $HOME/logs/년월일시분초/&lt;파일명&gt;년월일시분초.log </code>에 저장됩니다. 수집 끝은
+            각 세션에 Ctrl+C를 보냅니다. 완료 후 로컬 다운로드 여부를 확인할 수 있습니다.
+          </p>
+
+          <label className="field-label" htmlFor="log-paths">
+            로그 경로
+          </label>
+          <textarea
+            id="log-paths"
+            className="log-paths-input"
+            rows={8}
+            value={text}
+            placeholder={PLACEHOLDER}
+            disabled={collecting || busy || !!downloadAsk}
+            onChange={(e) => setText(e.target.value)}
+          />
+
+          <div className="log-collect-actions">
+            <button
+              type="button"
+              className="btn"
+              disabled={busy || collecting || !!downloadAsk}
+              onClick={() => void run(() => onSavePaths(paths))}
+            >
+              경로 저장
+            </button>
+            {!collecting ? (
+              <button
+                type="button"
+                className="btn primary"
+                disabled={busy || paths.length === 0 || !!downloadAsk}
+                onClick={() => void run(() => onStart(paths))}
+              >
+                수집 시작
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn danger"
+                disabled={busy || !!downloadAsk}
+                onClick={() => void handleStop()}
+              >
+                수집 끝
+              </button>
+            )}
+            <span className={`log-collect-state${collecting ? " on" : ""}`}>
+              {collecting ? "● 수집 중" : "○ 대기"}
+            </span>
+          </div>
+
+          {downloadAsk && (
+            <div className="log-download-ask">
+              <p>
+                수집이 완료되었습니다. 로컬로 다운로드할까요?
+                <br />
+                <span className="muted">
+                  원격: $HOME/logs/{downloadAsk[0]?.stamp}/ ·{" "}
+                  {downloadAsk.map((o) => o.fileName).join(", ")}
+                </span>
+              </p>
+              <label className="log-download-check">
+                <input
+                  type="checkbox"
+                  checked={wantDownload}
+                  onChange={(e) => setWantDownload(e.target.checked)}
+                />
+                로컬로 다운로드
+              </label>
+              {wantDownload && (
+                <div className="log-download-path">
+                  <label className="field-label" htmlFor="local-save-dir">
+                    저장 폴더
+                  </label>
+                  <div className="log-download-path-row">
+                    <input
+                      id="local-save-dir"
+                      className="path-bar"
+                      value={localSaveDir}
+                      placeholder="탐색기에서 폴더를 선택하세요"
+                      onChange={(e) => setLocalSaveDir(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={busy}
+                      onClick={() => void pickLocalDir()}
+                    >
+                      찾아보기…
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="log-download-ask-actions">
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={busy}
+                  onClick={() => void confirmDownloadAsk()}
+                >
+                  확인
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => setDownloadAsk(null)}
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(status || error) && (
+            <div className={`msg${error ? " error" : ""}`}>{status}</div>
+          )}
+
+          <div className="log-collect-outputs">
+            <h4>생성 파일</h4>
+            {workingDirHint && (
+              <p className="log-collect-cwd">
+                저장 디렉터리: <code>{workingDirHint}</code>
+              </p>
+            )}
+            {outputs.length === 0 ? (
+              <p className="muted">수집을 시작하면 여기에 출력 파일 경로가 표시됩니다.</p>
+            ) : (
+              <ul>
+                {outputs.map((o) => (
+                  <li key={o.outputFile}>
+                    <code className="log-out-file">{o.outputFile}</code>
+                    <span className="muted"> ← {o.source}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** `20260717145322` */
+export function formatLogStamp(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${y}${m}${d}${hh}${mm}${ss}`;
+}
+
+export function logStemFromPath(logPath: string) {
+  const base =
+    logPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "log";
+  return base.replace(/\.log$/i, "") || "log";
+}
+
+export function shellQuote(s: string) {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
+}
+
+export type LogCollectPlan = {
+  source: string;
+  /** Display / remote path e.g. `$HOME/logs/20260717145322/bms.log` */
+  outputFile: string;
+  fileName: string;
+  stamp: string;
+  collectDir: string;
+  command: string;
+  paneTitle: string;
+};
+
+/** Build parallel collect plan. Output → `$HOME/logs/<년월일시분초>/<name>.log` */
+export function buildLogCollectPlan(
+  paths: string[],
+  date = new Date(),
+): { plan: LogCollectPlan[]; collectDir: string; stamp: string } {
+  const stamp = formatLogStamp(date);
+  const collectDir = `$HOME/logs/${stamp}`;
+  const plan = paths.map((source) => {
+    const stem = logStemFromPath(source);
+    const fileName = `${stem}${stamp}.log`;
+    const outputFile = `${collectDir}/${fileName}`;
+    return {
+      source,
+      outputFile,
+      fileName,
+      stamp,
+      collectDir,
+      command: `mkdir -p "${collectDir}" && tail -f ${shellQuote(source)} > "${outputFile}"`,
+      paneTitle: `로그:${stem}`,
+    };
+  });
+  return { plan, collectDir, stamp };
+}
+
+export function buildLogCollectStartScript(
+  paths: string[],
+  date = new Date(),
+): { script: string; outputs: LogCollectOutput[]; collectDir: string } {
+  const { plan, collectDir, stamp } = buildLogCollectPlan(paths, date);
+  const outputs = plan.map((p) => ({
+    source: p.source,
+    outputFile: p.outputFile,
+    fileName: p.fileName,
+    stamp,
+  }));
+  const startAll = plan.map((p) => `(${p.command}) &`).join(" ");
+  const lines = [
+    "echo '=== log collect start (parallel) ==='",
+    `mkdir -p "${collectDir}"`,
+    startAll,
+    "sleep 0.2",
+    ...plan.map((p) => `echo \"CREATED:${p.outputFile}\"`),
+    "jobs -l",
+    "echo '=== tails running in background ==='",
+  ];
+  return { script: lines.join("\n"), outputs, collectDir };
+}
+
+export function buildLogCollectStopScript() {
+  return [
+    "echo '=== log collect stop ==='",
+    "kill $(jobs -p) 2>/dev/null || true",
+    "wait 2>/dev/null || true",
+    "echo '=== stopped ==='",
+  ].join("\n");
+}
