@@ -510,7 +510,7 @@ fn parent_remote_path(path: String) -> String {
 #[tauri::command]
 fn local_home() -> Result<String, String> {
     local_fs::home_dir()
-        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .map(|p| p.to_string_lossy().to_string())
         .map_err(err_string)
 }
 

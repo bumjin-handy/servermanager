@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { v4 as uuid } from "uuid";
 import { api } from "./api";
-import { FavoritesPanel } from "./components/FavoritesPanel";
+import { FavoritesPanel, type FavoriteRunTarget } from "./components/FavoritesPanel";
 import { FilesPane } from "./components/FilesPane";
 import {
   LogCollectPanel,
@@ -12,8 +12,9 @@ import {
 import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { TerminalPane, sendCtrlC, writeToSession } from "./components/TerminalPane";
-import { joinLocal } from "./components/fileManagerShared";
+import { joinLocal, toNativeLocalPath } from "./components/fileManagerShared";
 import type { AppSettingsView, Server, WorkspacePane } from "./types";
+import { openPath } from "@tauri-apps/plugin-opener";
 import "./App.css";
 
 function isLogCollectPane(pane: WorkspacePane) {
@@ -251,7 +252,7 @@ function App() {
     try {
       await api.sftpOpen(selected.id);
       const remoteHome = await api.sftpHome(selected.id);
-      const dir = localDir.replace(/\\/g, "/").replace(/\/$/, "");
+      const dir = toNativeLocalPath(localDir).replace(/[/\\]+$/, "");
       await api.localMkdir(dir);
 
       for (const o of outputs) {
@@ -321,15 +322,56 @@ function App() {
     });
   };
 
-  const onRunCommand = (value: string, run: boolean) => {
-    if (!activeTerminalSessionId) return;
-    void writeToSession(activeTerminalSessionId, value, run);
+  const openNewTerminalSession = async (): Promise<string | null> => {
+    setFileManagerOpen(false);
+    const count = panes.filter((p) => p.kind === "terminal").length + 1;
+    const pane = createTerminalPane(count);
+    setPanes((prev) => [...prev, pane]);
+    setActivePaneId(pane.id);
+    // Allow SSH session to connect before sending commands
+    await sleep(1500);
+    return pane.sessionId ?? null;
   };
 
-  const onGoPath = (path: string) => {
-    if (!activeTerminalSessionId) return;
+  const onRunCommand = (
+    value: string,
+    run: boolean,
+    target: FavoriteRunTarget = "current",
+  ) => {
+    void (async () => {
+      if (target === "new") {
+        const sessionId = await openNewTerminalSession();
+        if (!sessionId) return;
+        await writeToSession(sessionId, value, run);
+        return;
+      }
+      if (!activeTerminalSessionId) return;
+      await writeToSession(activeTerminalSessionId, value, run);
+    })();
+  };
+
+  const onGoPath = (path: string, target: FavoriteRunTarget = "current") => {
     const escaped = path.replace(/"/g, '\\"');
-    void writeToSession(activeTerminalSessionId, `cd "${escaped}"`, true);
+    const cmd = `cd "${escaped}"`;
+    void (async () => {
+      if (target === "new") {
+        const sessionId = await openNewTerminalSession();
+        if (!sessionId) return;
+        await writeToSession(sessionId, cmd, true);
+        return;
+      }
+      if (!activeTerminalSessionId) return;
+      await writeToSession(activeTerminalSessionId, cmd, true);
+    })();
+  };
+
+  const openLocalExplorer = async () => {
+    try {
+      const home = await api.localHome();
+      await openPath(toNativeLocalPath(home));
+    } catch (e) {
+      window.alert(`로컬 탐색기를 열 수 없습니다.\n${String(e)}`);
+    }
   };
 
   const deleteSelectedServer = async () => {
@@ -383,6 +425,9 @@ function App() {
           ))}
         </div>
         <div className="sidebar-footer">
+          <button className="btn" type="button" onClick={() => void openLocalExplorer()}>
+            로컬 탐색기
+          </button>
           <button className="btn" type="button" onClick={() => setShowSettings(true)}>
             설정
           </button>
@@ -414,6 +459,9 @@ function App() {
               </h2>
               <button className="btn" type="button" onClick={addTerminal}>
                 새 터미널
+              </button>
+              <button className="btn" type="button" onClick={() => void openLocalExplorer()}>
+                로컬 탐색기
               </button>
               <button
                 className={`btn${fileManagerOpen ? " primary" : ""}`}

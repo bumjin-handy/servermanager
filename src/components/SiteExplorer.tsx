@@ -12,6 +12,7 @@ import {
   encodeLocalDrag,
   encodeRemoteDrag,
   parseDragText,
+  toNativeLocalPath,
   type FileEntry,
   type RemoteDragPayload,
 } from "./fileManagerShared";
@@ -95,9 +96,11 @@ export function SiteExplorer({
               : await api.localList(p)
             : await api.sftpList(serverId!, p);
         setEntries(list);
-        setPath(p);
-        setPathInput(p === "" ? "내 PC" : p);
-        onPathChange(p);
+        const displayPath =
+          kind === "local" && p !== "" ? toNativeLocalPath(p) : p;
+        setPath(displayPath);
+        setPathInput(p === "" ? "내 PC" : displayPath);
+        onPathChange(displayPath);
         onSelect(null);
       } catch (e) {
         onStatus(String(e), true);
@@ -258,7 +261,7 @@ export function SiteExplorer({
       void load("");
       return;
     }
-    void load(raw);
+    void load(kind === "local" ? toNativeLocalPath(raw) : raw);
   };
 
   const openRemoteAsText = async (entry: FileEntry) => {

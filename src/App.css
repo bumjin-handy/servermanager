@@ -448,6 +448,43 @@ button {
   border-color: var(--accent);
 }
 
+.fav-run-target-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+}
+
+.fav-run-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.fav-run-opt.active {
+  color: var(--text);
+  border-color: rgba(61, 185, 232, 0.45);
+  background: var(--accent-dim);
+}
+
+.fav-run-opt input {
+  margin: 0;
+}
+
+.fav-run-hint {
+  margin-left: auto;
+  font-size: 11px;
+}
+
 .list {
   flex: 1;
   overflow: auto;
@@ -1043,6 +1080,24 @@ button {
   font-size: 13px;
 }
 
+.log-output-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.log-output-item {
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  cursor: context-menu;
+}
+
+.log-output-item:hover {
+  background: var(--accent-dim);
+}
+
 .log-collect-cwd {
   margin: 0 0 8px;
   font-size: 12px;
@@ -1097,6 +1152,32 @@ button {
 
 .msg.ok {
   color: var(--success);
+}
+
+.log-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.log-status-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.log-status-path {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.log-copy-path-btn {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
 }
 
 .resize-handle {

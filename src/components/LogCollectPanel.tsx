@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Server } from "../types";
+import type { RemoteTextContent, Server } from "../types";
 import { api } from "../api";
+import { toNativeLocalPath } from "./fileManagerShared";
+import { TextViewerModal } from "./TextViewerModal";
 
 export type LogCollectOutput = {
   source: string;
@@ -53,6 +55,74 @@ export function LogCollectPanel({
   const [downloadAsk, setDownloadAsk] = useState<LogCollectOutput[] | null>(null);
   const [wantDownload, setWantDownload] = useState(true);
   const [localSaveDir, setLocalSaveDir] = useState("");
+  const [copiedPath, setCopiedPath] = useState(false);
+  const [textView, setTextView] = useState<RemoteTextContent | null>(null);
+  const [textLoading, setTextLoading] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number;
+    y: number;
+    item: LogCollectOutput;
+  } | null>(null);
+
+  const downloadPathFromStatus = useMemo(() => {
+    if (!status || !status.includes("다운로드 완료")) return null;
+    const idx = status.lastIndexOf("→");
+    if (idx < 0) return null;
+    const path = status.slice(idx + 1).trim();
+    return path || null;
+  }, [status]);
+
+  const statusLabel = useMemo(() => {
+    if (!status || !downloadPathFromStatus) return status;
+    const idx = status.lastIndexOf("→");
+    return status.slice(0, idx).trim();
+  }, [status, downloadPathFromStatus]);
+
+  const copyPath = async (path: string) => {
+    try {
+      await navigator.clipboard.writeText(path);
+      setCopiedPath(true);
+      window.setTimeout(() => setCopiedPath(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [ctxMenu]);
+
+  const openOutputAsText = async (item: LogCollectOutput) => {
+    setCtxMenu(null);
+    setTextLoading(true);
+    try {
+      await api.sftpOpen(server.id);
+      const home = await api.sftpHome(server.id);
+      const remotePath = `${home.replace(/\/$/, "")}/logs/${item.stamp}/${item.fileName}`;
+      const content = await api.sftpReadText(server.id, remotePath);
+      setTextView(content);
+    } catch (e) {
+      window.alert(String(e));
+    } finally {
+      setTextLoading(false);
+    }
+  };
+
+  const onOutputContextMenu = (e: MouseEvent, item: LogCollectOutput) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY, item });
+  };
 
   useEffect(() => {
     setText(server.logCollectPaths?.join("\n") ?? "");
@@ -73,7 +143,9 @@ export function LogCollectPanel({
       try {
         const home = await api.localHome();
         if (!cancelled && !localSaveDir) {
-          setLocalSaveDir(`${home.replace(/[/\\]+$/, "")}/logs/${downloadAsk[0]?.stamp ?? ""}`);
+          setLocalSaveDir(
+            toNativeLocalPath(`${home.replace(/[/\\]+$/, "")}/logs/${downloadAsk[0]?.stamp ?? ""}`),
+          );
         }
       } catch {
         /* ignore */
@@ -125,7 +197,7 @@ export function LogCollectPanel({
       defaultPath: localSaveDir || undefined,
     });
     if (typeof selected === "string") {
-      setLocalSaveDir(selected.replace(/\\/g, "/"));
+      setLocalSaveDir(toNativeLocalPath(selected));
     }
   };
 
@@ -145,8 +217,10 @@ export function LogCollectPanel({
         title: "로그 저장 폴더 선택",
       });
       if (typeof selected !== "string") return;
-      dir = selected.replace(/\\/g, "/");
+      dir = toNativeLocalPath(selected);
       setLocalSaveDir(dir);
+    } else {
+      dir = toNativeLocalPath(dir);
     }
 
     setDownloadAsk(null);
@@ -291,7 +365,30 @@ export function LogCollectPanel({
           )}
 
           {(status || error) && (
-            <div className={`msg${error ? " error" : ""}`}>{status}</div>
+            <div className={`msg${error ? " error" : ""} log-status-row`}>
+              <span className="log-status-text">
+                {downloadPathFromStatus ? (
+                  <>
+                    {statusLabel}{" "}
+                    <code className="log-status-path" title={downloadPathFromStatus}>
+                      {downloadPathFromStatus}
+                    </code>
+                  </>
+                ) : (
+                  status
+                )}
+              </span>
+              {downloadPathFromStatus && (
+                <button
+                  type="button"
+                  className="btn log-copy-path-btn"
+                  title="경로 복사"
+                  onClick={() => void copyPath(downloadPathFromStatus)}
+                >
+                  {copiedPath ? "복사됨" : "경로 복사"}
+                </button>
+              )}
+            </div>
           )}
 
           <div className="log-collect-outputs">
@@ -301,12 +398,19 @@ export function LogCollectPanel({
                 저장 디렉터리: <code>{workingDirHint}</code>
               </p>
             )}
+            {textLoading && <p className="muted">파일 여는 중…</p>}
             {outputs.length === 0 ? (
               <p className="muted">수집을 시작하면 여기에 출력 파일 경로가 표시됩니다.</p>
             ) : (
-              <ul>
+              <ul className="log-output-list">
                 {outputs.map((o) => (
-                  <li key={o.outputFile}>
+                  <li
+                    key={o.outputFile}
+                    className="log-output-item"
+                    onContextMenu={(e) => onOutputContextMenu(e, o)}
+                    onDoubleClick={() => void openOutputAsText(o)}
+                    title="우클릭 또는 더블클릭으로 텍스트 보기"
+                  >
                     <code className="log-out-file">{o.outputFile}</code>
                     <span className="muted"> ← {o.source}</span>
                   </li>
@@ -315,6 +419,32 @@ export function LogCollectPanel({
             )}
           </div>
         </div>
+
+        {ctxMenu && (
+          <div
+            className="context-menu"
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="context-menu-item"
+              onClick={() => void openOutputAsText(ctxMenu.item)}
+            >
+              열기 (텍스트)
+            </button>
+          </div>
+        )}
+
+        {textView && (
+          <TextViewerModal
+            path={textView.path}
+            content={textView.content}
+            size={textView.size}
+            truncated={textView.truncated}
+            onClose={() => setTextView(null)}
+          />
+        )}
       </div>
     </div>
   );

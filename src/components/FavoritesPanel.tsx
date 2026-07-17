@@ -2,10 +2,12 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import type { Favorite, FavoriteType } from "../types";
 
+export type FavoriteRunTarget = "current" | "new";
+
 interface Props {
   serverId: string;
-  onRunCommand: (value: string, run: boolean) => void;
-  onGoPath: (path: string) => void;
+  onRunCommand: (value: string, run: boolean, target: FavoriteRunTarget) => void;
+  onGoPath: (path: string, target: FavoriteRunTarget) => void;
 }
 
 export function FavoritesPanel({ serverId, onRunCommand, onGoPath }: Props) {
@@ -13,6 +15,7 @@ export function FavoritesPanel({ serverId, onRunCommand, onGoPath }: Props) {
   const [label, setLabel] = useState("");
   const [value, setValue] = useState("");
   const [type, setType] = useState<FavoriteType>("command");
+  const [runTarget, setRunTarget] = useState<FavoriteRunTarget>("current");
   const [error, setError] = useState<string | null>(null);
 
   const reload = async () => {
@@ -79,6 +82,32 @@ export function FavoritesPanel({ serverId, onRunCommand, onGoPath }: Props) {
           추가
         </button>
       </form>
+
+      <div className="fav-run-target-bar">
+        <span className="field-label">실행 위치</span>
+        <label className={`fav-run-opt${runTarget === "current" ? " active" : ""}`}>
+          <input
+            type="radio"
+            name="fav-run-target"
+            checked={runTarget === "current"}
+            onChange={() => setRunTarget("current")}
+          />
+          현재 터미널
+        </label>
+        <label className={`fav-run-opt${runTarget === "new" ? " active" : ""}`}>
+          <input
+            type="radio"
+            name="fav-run-target"
+            checked={runTarget === "new"}
+            onChange={() => setRunTarget("new")}
+          />
+          새 터미널
+        </label>
+        <span className="muted fav-run-hint">
+          실행·이동에 적용 (삽입은 항상 현재 터미널)
+        </span>
+      </div>
+
       {error && <div className="msg error" style={{ padding: "0 8px" }}>{error}</div>}
       <div className="list">
         {items.length === 0 && (
@@ -95,16 +124,39 @@ export function FavoritesPanel({ serverId, onRunCommand, onGoPath }: Props) {
             </div>
             {item.type === "command" ? (
               <>
-                <button className="btn" type="button" onClick={() => onRunCommand(item.value, false)}>
+                <button
+                  className="btn"
+                  type="button"
+                  title="현재 터미널에 명령만 입력"
+                  onClick={() => onRunCommand(item.value, false, "current")}
+                >
                   삽입
                 </button>
-                <button className="btn" type="button" onClick={() => onRunCommand(item.value, true)}>
-                  실행
+                <button
+                  className="btn"
+                  type="button"
+                  title={
+                    runTarget === "new"
+                      ? "새 터미널에서 실행"
+                      : "현재 터미널에서 실행"
+                  }
+                  onClick={() => onRunCommand(item.value, true, runTarget)}
+                >
+                  {runTarget === "new" ? "새 창 실행" : "실행"}
                 </button>
               </>
             ) : (
-              <button className="btn" type="button" onClick={() => onGoPath(item.value)}>
-                이동
+              <button
+                className="btn"
+                type="button"
+                title={
+                  runTarget === "new"
+                    ? "새 터미널에서 경로 이동"
+                    : "현재 터미널에서 경로 이동"
+                }
+                onClick={() => onGoPath(item.value, runTarget)}
+              >
+                {runTarget === "new" ? "새 창 이동" : "이동"}
               </button>
             )}
             <button className="btn danger" type="button" onClick={() => void remove(item.id)}>

@@ -37,9 +37,27 @@ export function joinRemote(dir: string, name: string) {
   return `${dir.replace(/\/$/, "")}/${name}`;
 }
 
+/** True when running on Windows (Tauri / browser UA). */
+export function isWindowsOs() {
+  if (typeof navigator === "undefined") return false;
+  return /Win/i.test(navigator.platform) || /Windows/i.test(navigator.userAgent);
+}
+
+/** Normalize a local filesystem path to the current OS style. */
+export function toNativeLocalPath(path: string) {
+  if (!path) return path;
+  if (isWindowsOs()) {
+    let p = path.replace(/\//g, "\\");
+    // `C:` → `C:\`
+    if (/^[A-Za-z]:$/.test(p)) p = `${p}\\`;
+    return p;
+  }
+  return path.replace(/\\/g, "/");
+}
+
 export function joinLocal(dir: string, name: string) {
-  const base = dir.replace(/[/\\]+$/, "");
-  const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
+  const base = toNativeLocalPath(dir).replace(/[/\\]+$/, "");
+  const sep = isWindowsOs() ? "\\" : "/";
   return `${base}${sep}${name}`;
 }
 

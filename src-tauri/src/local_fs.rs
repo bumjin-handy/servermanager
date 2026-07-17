@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 /// Virtual root that lists all local drives / mount points.
 pub const COMPUTER_ROOT: &str = "";
 
+fn path_string(path: &Path) -> String {
+    path.to_string_lossy().to_string()
+}
+
 pub fn home_dir() -> Result<PathBuf> {
     dirs::home_dir().context("로컬 홈 디렉터리를 찾을 수 없습니다")
 }
@@ -24,7 +28,7 @@ pub fn list_drives() -> Result<Vec<RemoteFileEntry>> {
             if path.exists() {
                 drives.push(RemoteFileEntry {
                     name: format!("{}:", letter as char),
-                    path: format!("{}:/", letter as char),
+                    path: root,
                     is_dir: true,
                     size: 0,
                 });
@@ -69,7 +73,7 @@ pub fn list_dir(path: &Path) -> Result<Vec<RemoteFileEntry>> {
         }
         entries.push(RemoteFileEntry {
             name,
-            path: entry.path().to_string_lossy().replace('\\', "/"),
+            path: path_string(&entry.path()),
             is_dir: meta.is_dir(),
             size: if meta.is_file() { meta.len() } else { 0 },
         });
@@ -83,7 +87,7 @@ pub fn list_dir(path: &Path) -> Result<Vec<RemoteFileEntry>> {
     Ok(entries)
 }
 
-/// Returns parent path. Drive roots (`C:/`) become the virtual computer root (`""`).
+/// Returns parent path. Drive roots (`C:\` / `C:/`) become the virtual computer root (`""`).
 pub fn parent_path(path: &str) -> String {
     let normalized = path.replace('\\', "/");
     let trimmed = normalized.trim_end_matches('/');
@@ -94,7 +98,6 @@ pub fn parent_path(path: &str) -> String {
 
     #[cfg(windows)]
     {
-        // `C:` or `C:/`
         if trimmed.len() == 2 && trimmed.as_bytes()[1] == b':' {
             return COMPUTER_ROOT.to_string();
         }
@@ -108,11 +111,16 @@ pub fn parent_path(path: &str) -> String {
 
     match p.parent() {
         Some(parent) => {
-            let s = parent.to_string_lossy().replace('\\', "/");
+            let s = path_string(parent);
             if s.is_empty() {
                 COMPUTER_ROOT.to_string()
-            } else if cfg!(windows) && s.ends_with(':') {
-                format!("{s}/")
+            } else if cfg!(windows) {
+                let t = s.trim_end_matches(['\\', '/']);
+                if t.len() == 2 && t.as_bytes().get(1) == Some(&b':') {
+                    format!("{}\\", t)
+                } else {
+                    s
+                }
             } else {
                 s
             }
