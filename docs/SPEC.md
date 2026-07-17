@@ -47,8 +47,11 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 ### 서버별 `.env` (기본)
 
 - 서버마다 전용 `.env` 경로 + 키 이름 (`SSH_PASSWORD` / `SSH_PRIVATE_KEY`)
-- 저장 시 파일 없으면 템플릿 자동 생성
-- 경로 추천: `{defaultEnvDir}/{sanitizedName}.env`
+- **서버 추가 시 암호(또는 개인키)를 UI에서 입력** → `.env`에 **평문** 저장 (+ OS 키링 미러)
+- 저장 시 파일 없으면 `{영문서버명}.env` 자동 생성
+- 경로 추천: `{defaultEnvDir}/{englishSlug}.env` (이름에 ASCII 없으면 호스트 기반)
+- 수정 시 암호란을 비우면 기존 `.env` 값 유지
+- 구버전 `ENC:v1:` 값은 읽기 시 복호화 시도(재저장 시 평문으로 덮어씀)
 - 파일 선택 다이얼로그·연결 테스트 지원
 
 ### Infisical (선택)

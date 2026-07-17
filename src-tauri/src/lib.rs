@@ -2,11 +2,13 @@ mod env_secrets;
 mod infisical;
 mod local_fs;
 mod models;
+mod secret_crypto;
 mod sftp;
 mod ssh;
 mod store;
 
-use env_secrets::{ensure_env_file, env_file_exists, get_env_value};
+use env_secrets::{ensure_env_file, env_file_exists, get_env_value, upsert_env_value};
+use secret_crypto::{delete_server_secret, load_server_secret, save_server_secret};
 use infisical::InfisicalClient;
 use models::{
     AuthType, CredentialSource, Favorite, FavoriteType, InfisicalConfig, RemoteFileEntry,
@@ -66,6 +68,9 @@ struct UpsertServerInput {
     infisical_secret_path: String,
     #[serde(default)]
     infisical_secret_name: String,
+    /// Optional secret to write into the per-server `.env` (password or private key).
+    #[serde(default)]
+    secret_value: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -81,6 +86,16 @@ fn upsert_server(
     state: State<'_, AppState>,
     input: UpsertServerInput,
 ) -> Result<UpsertServerResult, String> {
+    let is_new = input
+        .id
+        .as_ref()
+        .map(|s| s.is_empty())
+        .unwrap_or(true);
+    let id = input
+        .id
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
     let mut env_file_path = input.env_file_path.trim().to_string();
     let env_key = if input.env_key.trim().is_empty() {
         match input.auth_type {
@@ -96,18 +111,26 @@ fn upsert_server(
         if env_file_path.is_empty() {
             let store = state.store.lock().map_err(|e| e.to_string())?;
             env_file_path = store
-                .suggest_env_file_path(&input.name)
+                .suggest_env_file_path_with_host(&input.name, &input.host)
                 .display()
                 .to_string();
         }
-        env_file_created =
-            ensure_env_file(std::path::Path::new(&env_file_path), &env_key).map_err(err_string)?;
+        let path = std::path::Path::new(&env_file_path);
+        let secret = input
+            .secret_value
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty());
+        if let Some(value) = secret {
+            // OS keyring mirror + plaintext .env
+            save_server_secret(&id, value).map_err(err_string)?;
+            env_file_created = upsert_env_value(path, &env_key, value).map_err(err_string)?;
+        } else if is_new {
+            return Err("서버 암호(또는 개인키)를 입력하세요. .env 파일에 저장됩니다.".into());
+        } else {
+            env_file_created = ensure_env_file(path, &env_key).map_err(err_string)?;
+        }
     }
-
-    let id = input
-        .id
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
 
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let log_collect_paths = store
@@ -159,6 +182,7 @@ fn save_log_collect_paths(
 
 #[tauri::command]
 fn delete_server(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let _ = delete_server_secret(&id);
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     store.delete_server(&id).map_err(err_string)
 }
@@ -286,10 +310,14 @@ fn save_infisical_config(
 }
 
 #[tauri::command]
-fn suggest_env_path(state: State<'_, AppState>, server_name: String) -> Result<String, String> {
+fn suggest_env_path(
+    state: State<'_, AppState>,
+    server_name: String,
+    host: Option<String>,
+) -> Result<String, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     Ok(store
-        .suggest_env_file_path(&server_name)
+        .suggest_env_file_path_with_host(&server_name, host.as_deref().unwrap_or(""))
         .display()
         .to_string())
 }
@@ -322,10 +350,8 @@ async fn test_infisical_connection(state: State<'_, AppState>) -> Result<(), Str
 async fn fetch_server_secret(state: &AppState, server: &Server) -> Result<String, String> {
     match server.credential_source {
         CredentialSource::Env => {
+            // Prefer plaintext .env; fall back to OS keyring.
             let path = server.env_file_path.trim();
-            if path.is_empty() {
-                return Err("이 서버의 .env 파일 경로가 설정되지 않았습니다".into());
-            }
             let key = if server.env_key.trim().is_empty() {
                 match server.auth_type {
                     AuthType::Password => "SSH_PASSWORD",
@@ -334,7 +360,28 @@ async fn fetch_server_secret(state: &AppState, server: &Server) -> Result<String
             } else {
                 server.env_key.trim()
             };
-            get_env_value(std::path::Path::new(path), key).map_err(err_string)
+
+            if !path.is_empty() {
+                match get_env_value(std::path::Path::new(path), key) {
+                    Ok(secret) if !secret_crypto::is_encrypted(&secret) => {
+                        let _ = save_server_secret(&server.id, &secret);
+                        return Ok(secret);
+                    }
+                    Ok(_) => {
+                        return Err(
+                            "저장된 암호가 손상되었습니다. 서버 수정에서 실제 SSH 평문 암호를 다시 입력·저장하세요."
+                                .into(),
+                        );
+                    }
+                    Err(_) => { /* fall through to keyring */ }
+                }
+            }
+
+            if let Some(secret) = load_server_secret(&server.id).map_err(err_string)? {
+                return Ok(secret);
+            }
+
+            Err("자격 증명이 없습니다. 서버를 수정해 평문 SSH 암호를 다시 저장하세요.".into())
         }
         CredentialSource::Infisical => {
             let config = {

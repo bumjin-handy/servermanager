@@ -117,9 +117,29 @@ impl Store {
     }
 
     pub fn suggest_env_file_path(&self, server_name: &str) -> PathBuf {
-        let slug = sanitize_filename(server_name);
+        self.suggest_env_file_path_with_host(server_name, "")
+    }
+
+    /// Prefer ASCII slug from server name; if empty (e.g. Korean-only name), use host.
+    pub fn suggest_env_file_path_with_host(&self, server_name: &str, host: &str) -> PathBuf {
+        let slug = english_env_slug(server_name, host);
         self.resolve_default_env_dir().join(format!("{slug}.env"))
     }
+}
+
+/// Build an English-safe filename stem from server name, falling back to host.
+/// Examples: `ProdApi`, `nh-web`, `10-30-9-164`
+pub fn english_env_slug(server_name: &str, host: &str) -> String {
+    let from_name = sanitize_filename(server_name);
+    let name_has_ascii = server_name.chars().any(|c| c.is_ascii_alphanumeric());
+    if name_has_ascii {
+        return from_name;
+    }
+    let from_host = sanitize_filename(&host.trim().replace('.', "-").replace(':', "-"));
+    if from_host != "server" {
+        return from_host;
+    }
+    from_name
 }
 
 fn sanitize_filename(name: &str) -> String {
@@ -127,14 +147,20 @@ fn sanitize_filename(name: &str) -> String {
         .chars()
         .map(|c| match c {
             'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => c,
+            '.' => '-',
             _ => '_',
         })
         .collect();
-    let s = s.trim_matches('_');
+    let s = s
+        .split(|c| c == '_' || c == '-')
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    let s = s.trim_matches(|c| c == '_' || c == '-').to_string();
     if s.is_empty() {
         "server".to_string()
     } else {
-        s.to_string()
+        s
     }
 }
 

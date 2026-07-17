@@ -425,9 +425,6 @@ function App() {
           ))}
         </div>
         <div className="sidebar-footer">
-          <button className="btn" type="button" onClick={() => void openLocalExplorer()}>
-            로컬 탐색기
-          </button>
           <button className="btn" type="button" onClick={() => setShowSettings(true)}>
             설정
           </button>

@@ -26,6 +26,8 @@ export const api = {
     infisicalEnv: string;
     infisicalSecretPath: string;
     infisicalSecretName: string;
+    /** Written into the per-server .env when credentialSource is env */
+    secretValue?: string;
   }) => invoke<{ server: Server; envFileCreated: boolean; envFilePath: string }>(
     "upsert_server",
     { input },
@@ -55,8 +57,8 @@ export const api = {
     environment: string;
     clientSecret?: string;
   }) => invoke<void>("save_app_settings", { input }),
-  suggestEnvPath: (serverName: string) =>
-    invoke<string>("suggest_env_path", { serverName }),
+  suggestEnvPath: (serverName: string, host?: string) =>
+    invoke<string>("suggest_env_path", { serverName, host: host ?? null }),
   testEnvFile: (path: string) => invoke<string>("test_env_file", { path }),
   testInfisicalConnection: () => invoke<void>("test_infisical_connection"),
 

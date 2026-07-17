@@ -11,6 +11,7 @@ interface Props {
 }
 
 export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
+  const isEdit = Boolean(initial?.id);
   const [name, setName] = useState(initial?.name ?? "");
   const [host, setHost] = useState(initial?.host ?? "");
   const [port, setPort] = useState(initial?.port ?? 22);
@@ -24,6 +25,7 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
     initial?.envKey ||
       (initial?.authType === "privateKey" ? "SSH_PRIVATE_KEY" : "SSH_PASSWORD"),
   );
+  const [secretValue, setSecretValue] = useState("");
   const [projectId, setProjectId] = useState(
     initial?.infisicalProjectId || defaults?.projectId || "",
   );
@@ -46,10 +48,36 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Auto-suggest `{englishName}.env` when creating / path empty
+  useEffect(() => {
+    if (credentialSource !== "env") return;
+    if (isEdit && initial?.envFilePath) return;
+    const n = name.trim();
+    const h = host.trim();
+    if (!n && !h) return;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const path = await api.suggestEnvPath(n || "server", h);
+          if (!cancelled) {
+            setEnvFilePath(path);
+          }
+        } catch {
+          /* ignore suggest errors while typing */
+        }
+      })();
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [name, host, credentialSource, isEdit, initial?.envFilePath]);
+
   const suggestPath = async () => {
     const n = name.trim() || "server";
     try {
-      const path = await api.suggestEnvPath(n);
+      const path = await api.suggestEnvPath(n, host.trim());
       setEnvFilePath(path);
       setMsg(`추천 경로: ${path}`);
     } catch (e) {
@@ -91,6 +119,20 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
       if (credentialSource === "infisical" && !secretName.trim()) {
         throw new Error("Infisical 시크릿 이름을 입력하세요");
       }
+      if (credentialSource === "env" && !isEdit && !secretValue.trim()) {
+        throw new Error(
+          authType === "password"
+            ? "서버 암호를 입력하세요 (.env에 저장됩니다)"
+            : "개인키를 입력하세요 (.env에 저장됩니다)",
+        );
+      }
+
+      let path = envFilePath.trim();
+      if (credentialSource === "env" && !path) {
+        path = await api.suggestEnvPath(name.trim() || "server", host.trim());
+        setEnvFilePath(path);
+      }
+
       const result = await api.upsertServer({
         id: initial?.id,
         name: name.trim(),
@@ -99,19 +141,22 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
         username: username.trim(),
         authType,
         credentialSource,
-        envFilePath: envFilePath.trim(),
+        envFilePath: path,
         envKey: envKey.trim(),
         infisicalProjectId: projectId.trim(),
         infisicalEnv: environment.trim(),
         infisicalSecretPath: secretPath.trim() || "/",
         infisicalSecretName: secretName.trim(),
+        secretValue: secretValue.trim() || undefined,
       });
       if (result.envFilePath) {
         setEnvFilePath(result.envFilePath);
       }
-      if (result.envFileCreated) {
+      if (secretValue.trim()) {
+        setMsg(`.env에 자격 증명을 저장했습니다: ${result.envFilePath}`);
+      } else if (result.envFileCreated) {
         window.alert(
-          `.env 파일을 생성했습니다.\n${result.envFilePath}\n\n파일에 비밀값을 입력한 뒤 연결하세요.`,
+          `.env 파일을 생성했습니다.\n${result.envFilePath}\n\n필요 시 파일을 열어 비밀값을 확인하세요.`,
         );
       }
       onSaved(result.server);
@@ -125,11 +170,16 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h3>{initial ? "서버 수정" : "서버 추가"}</h3>
+        <h3>{isEdit ? "서버 수정" : "서버 추가"}</h3>
         <div className="form-grid">
           <div className="form-field">
-            <label>이름</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
+            <label>이름 (영문 권장 — .env 파일명에 사용)</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="예: nh-web, ProdApi"
+              required
+            />
           </div>
           <div className="form-field">
             <label>호스트</label>
@@ -164,6 +214,7 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
                 if (!initial?.envKey) {
                   setEnvKey(next === "privateKey" ? "SSH_PRIVATE_KEY" : "SSH_PASSWORD");
                 }
+                setSecretValue("");
               }}
             >
               <option value="password">비밀번호</option>
@@ -184,15 +235,53 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
           {credentialSource === "env" ? (
             <>
               <div className="form-field">
-                <label>서버 전용 .env 경로 (없으면 저장 시 자동 생성)</label>
+                <label>
+                  {authType === "password"
+                    ? isEdit
+                      ? "서버 암호 (입력 시 .env 갱신, 비우면 유지)"
+                      : "서버 암호 (.env에 저장)"
+                    : isEdit
+                      ? "개인키 (입력 시 .env 갱신, 비우면 유지)"
+                      : "개인키 (.env에 저장)"}
+                </label>
+                {authType === "password" ? (
+                  <input
+                    type="password"
+                    value={secretValue}
+                    onChange={(e) => setSecretValue(e.target.value)}
+                    autoComplete="new-password"
+                    placeholder={isEdit ? "변경할 때만 입력" : "SSH 평문 암호"}
+                    required={!isEdit}
+                  />
+                ) : (
+                  <textarea
+                    value={secretValue}
+                    onChange={(e) => setSecretValue(e.target.value)}
+                    placeholder={
+                      isEdit
+                        ? "변경할 때만 PEM 키를 붙여넣기"
+                        : "-----BEGIN OPENSSH PRIVATE KEY-----"
+                    }
+                    rows={5}
+                    required={!isEdit}
+                    style={{ fontFamily: "ui-monospace, Consolas, monospace", fontSize: 12 }}
+                  />
+                )}
+                <div className="msg" style={{ marginTop: 6, opacity: 0.85, fontSize: 12 }}>
+                  .env에 평문으로 저장됩니다. 이 파일을 커밋하지 마세요.
+                </div>
+              </div>
+              <div className="form-field">
+                <label>서버 전용 .env 경로 (영문서버명.env, 없으면 생성)</label>
                 <input
                   value={envFilePath}
                   onChange={(e) => setEnvFilePath(e.target.value)}
-                  placeholder="비우면 이름 기준으로 경로 추천 후 생성"
+                  placeholder="이름·호스트 기준으로 자동 추천"
+                  readOnly={!isEdit}
                 />
                 <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                   <button type="button" className="btn" onClick={() => void suggestPath()}>
-                    경로 추천
+                    경로 다시 추천
                   </button>
                   <button type="button" className="btn" onClick={() => void pickEnvFile()}>
                     파일 선택
