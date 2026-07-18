@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { v4 as uuid } from "uuid";
-import { api } from "./api";
+import { api, runWithSessionSecret, registerPromptHandler } from "./api";
 import { FavoritesPanel, type FavoriteRunTarget } from "./components/FavoritesPanel";
+import { SecretPromptModal } from "./components/SecretPromptModal";
 import { FilesPane } from "./components/FilesPane";
 import {
   LogCollectPanel,
@@ -59,6 +60,20 @@ function App() {
     y: number;
     server: Server;
   } | null>(null);
+
+  const [secretPrompt, setSecretPrompt] = useState<{
+    label: string;
+    resolve: (val: string) => void;
+    reject: (err: Error) => void;
+  } | null>(null);
+
+  useEffect(() => {
+    registerPromptHandler((label) => {
+      return new Promise<string>((resolve, reject) => {
+        setSecretPrompt({ label, resolve, reject });
+      });
+    });
+  }, []);
 
   const selected = useMemo(
     () => servers.find((s) => s.id === selectedId) ?? null,
@@ -250,7 +265,7 @@ function App() {
     setLogCollectStatus("로그 파일 다운로드 중…");
     setLogCollectError(false);
     try {
-      await api.sftpOpen(selected.id);
+      await runWithSessionSecret(selected.id, () => api.sftpOpen(selected.id));
       const remoteHome = await api.sftpHome(selected.id);
       const dir = toNativeLocalPath(localDir).replace(/[/\\]+$/, "");
       await api.localMkdir(dir);
@@ -442,7 +457,7 @@ function App() {
             <div>
               <h3>Server Manager</h3>
               <p>좌측에서 서버를 추가하거나 선택하세요.</p>
-              <p className="sub">접속 정보는 서버별 .env 파일(기본) 또는 Infisical(선택)에서 가져옵니다.</p>
+              <p className="sub">암호/개인키는 접속 시 한 번만 입력받아 메모리에 보관하고, Infisical은 선택적으로 사용할 수 있습니다.</p>
             </div>
           </div>
         ) : (
@@ -582,6 +597,20 @@ function App() {
         <SettingsModal
           onClose={() => setShowSettings(false)}
           onSaved={(cfg) => setSettings(cfg)}
+        />
+      )}
+
+      {secretPrompt && (
+        <SecretPromptModal
+          label={secretPrompt.label}
+          onSubmit={(value) => {
+            secretPrompt.resolve(value);
+            setSecretPrompt(null);
+          }}
+          onCancel={() => {
+            secretPrompt.reject(new Error("cancel"));
+            setSecretPrompt(null);
+          }}
         />
       )}
 

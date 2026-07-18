@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { api } from "../api";
+import { api, runWithSessionSecret } from "../api";
 import { SiteExplorer } from "./SiteExplorer";
 import type { FileEntry } from "./fileManagerShared";
 import { fileNameFromPath, joinLocal, joinRemote } from "./fileManagerShared";
@@ -34,7 +34,7 @@ export function FilesPane({ serverId }: Props) {
         setLocalHome(homeLocal);
         setLocalPath(homeLocal);
 
-        await api.sftpOpen(serverId);
+        await runWithSessionSecret(serverId, () => api.sftpOpen(serverId));
         if (cancelled) return;
         const homeRemote = await api.sftpHome(serverId);
         if (cancelled) return;

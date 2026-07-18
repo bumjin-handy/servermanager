@@ -42,22 +42,26 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 - 필드: 이름, host, port, username
 - 인증: password / private key
-- 자격 증명 소스: **`.env`(기본)** 또는 **Infisical(선택)**
+- 자격 증명 소스: **`env`(기본, 접속 시 메모리 입력)** 또는 **Infisical(선택)**
+- 서버 데이터에는 `envFilePath` / `envKey`가 남아 있고, 필요 시 `.env` 경로를 함께 저장 가능
 
-### 서버별 `.env` (기본)
+### 서버별 `.env` 지원(선택)
 
-- 서버마다 전용 `.env` 경로 + 키 이름 (`SSH_PASSWORD` / `SSH_PRIVATE_KEY`)
-- **서버 추가 시 암호(또는 개인키)를 UI에서 입력** → `.env`에 **평문** 저장 (+ OS 키링 미러)
-- 저장 시 파일 없으면 `{영문서버명}.env` 자동 생성
+- 서버마다 전용 `.env` 경로 + 키 이름 (`SSH_PASSWORD` / `SSH_PRIVATE_KEY`)를 보유할 수 있음
+- 현재 기본 UX는 **서버 추가/수정 시 암호·개인키 입력을 비동기적으로 받아 접속 시점에 한 번만 메모리에 보관**하는 방식
+- 즉, **평문 비밀번호/개인키를 `store.json`에 영속화하지 않음**
+- 백엔드는 여전히 `envFilePath` + `envKey` 조합으로 `.env` 경로 검증·추천을 지원
 - 경로 추천: `{defaultEnvDir}/{englishSlug}.env` (이름에 ASCII 없으면 호스트 기반)
-- 수정 시 암호란을 비우면 기존 `.env` 값 유지
-- 구버전 `ENC:v1:` 값은 읽기 시 복호화 시도(재저장 시 평문으로 덮어씀)
 - 파일 선택 다이얼로그·연결 테스트 지원
+- `defaultEnvDir`는 “경로 추천” 버튼의 제안값에만 쓰이며, 기본 인증 저장 방식은 메모리 기반
 
 ### Infisical (선택)
 
-- Universal Auth, 프로젝트/환경/시크릿 경로
-- Client secret은 OS keyring 저장
+- 서버 자격 증명 소스를 `Infisical`로 바꾸면, 앱 전역 설정과 서버별 시크릿 경로/이름 조합으로 비밀을 조회합니다.
+- 앱 설정에는 Site URL, Client ID, Project ID / Environment 기본값, Client Secret을 저장합니다.
+- Client Secret은 OS keyring에만 보관됩니다.
+- 서버마다 `infisicalProjectId`, `infisicalEnv`, `infisicalSecretPath`, `infisicalSecretName`을 지정할 수 있으며, 이 값들은 영구 저장소의 서버 설정으로 남습니다.
+- 조회된 비밀은 현재 세션에서만 사용되며, `store.json`에 암호를 평문으로 남기지 않습니다.
 - 상세: [infisical.md](infisical.md)
 
 ---
@@ -165,7 +169,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 - 파일 관리자 ↔ 터미널: SSH 세션 **유지**
 - 로그수집 터미널: 수집 종료 후 **자동 닫힘**
 - 로그 로컬 저장: **사용자 확인 + 폴더 선택** 후에만 수행
-- 자격 증명: 기본은 서버별 `.env`, Infisical은 옵션
+- 자격 증명: 기본은 접속 시 입력 후 세션 메모리에만 보관, Infisical은 옵션
 
 ---
 

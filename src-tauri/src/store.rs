@@ -116,6 +116,7 @@ impl Store {
         }
     }
 
+    #[allow(dead_code)]
     pub fn suggest_env_file_path(&self, server_name: &str) -> PathBuf {
         self.suggest_env_file_path_with_host(server_name, "")
     }

@@ -10,6 +10,8 @@ import type {
   CredentialSource,
 } from "./types";
 
+export const SECRET_REQUIRED = "SECRET_REQUIRED";
+
 export const api = {
   listServers: () => invoke<Server[]>("list_servers"),
   upsertServer: (input: {
@@ -26,15 +28,17 @@ export const api = {
     infisicalEnv: string;
     infisicalSecretPath: string;
     infisicalSecretName: string;
-    /** Written into the per-server .env when credentialSource is env */
-    secretValue?: string;
-  }) => invoke<{ server: Server; envFileCreated: boolean; envFilePath: string }>(
-    "upsert_server",
-    { input },
-  ),
+  }) => invoke<{ server: Server }>("upsert_server", { input }),
   deleteServer: (id: string) => invoke<void>("delete_server", { id }),
   saveLogCollectPaths: (serverId: string, paths: string[]) =>
     invoke<Server>("save_log_collect_paths", { serverId, paths }),
+
+  setSessionSecret: (serverId: string, secret: string) =>
+    invoke<void>("set_session_secret", { serverId, secret }),
+  clearSessionSecret: (serverId: string) =>
+    invoke<void>("clear_session_secret", { serverId }),
+  hasSessionSecret: (serverId: string) =>
+    invoke<boolean>("has_session_secret", { serverId }),
 
   listFavorites: (serverId: string) =>
     invoke<Favorite[]>("list_favorites", { serverId }),
@@ -90,3 +94,73 @@ export const api = {
     invoke<RemoteFileEntry[]>("local_list", { path }),
   localParent: (path: string) => invoke<string>("local_parent", { path }),
 };
+
+export function isSecretRequired(error: unknown) {
+  return String(error) === SECRET_REQUIRED;
+}
+
+export const AUTH_FAILED = "AUTH_FAILED";
+
+export function isAuthFailed(error: unknown) {
+  return String(error).includes(AUTH_FAILED);
+}
+
+let promptHandler: ((label: string) => Promise<string>) | null = null;
+
+export function registerPromptHandler(handler: (label: string) => Promise<string>) {
+  promptHandler = handler;
+}
+
+export async function promptForSessionSecret(serverId: string, label = "SSH 암호 또는 개인키") {
+  if (promptHandler) {
+    try {
+      const secret = await promptHandler(label);
+      await api.setSessionSecret(serverId, secret);
+      return;
+    } catch (err) {
+      throw new Error("자격 증명 입력이 취소되었습니다.");
+    }
+  }
+
+  const secret = window.prompt(`${label}를 입력하세요.\n입력값은 현재 앱 실행 중 메모리에만 저장됩니다.`);
+  if (!secret?.trim()) {
+    throw new Error("자격 증명 입력이 취소되었습니다.");
+  }
+  await api.setSessionSecret(serverId, secret);
+}
+
+export async function runWithSessionSecret<T>(
+  serverId: string,
+  action: () => Promise<T>,
+  label?: string,
+): Promise<T> {
+  let attempt = 0;
+  const maxAttempts = 3;
+
+  while (true) {
+    try {
+      return await action();
+    } catch (e) {
+      if (isSecretRequired(e)) {
+        await promptForSessionSecret(serverId, label);
+        continue;
+      }
+
+      if (isAuthFailed(e)) {
+        attempt++;
+        if (attempt >= maxAttempts) {
+          await api.clearSessionSecret(serverId);
+          throw new Error("SSH 인증 실패 횟수가 3회를 초과하였습니다.");
+        }
+        await api.clearSessionSecret(serverId);
+        await promptForSessionSecret(
+          serverId,
+          `${label} (인증 실패, ${attempt}/${maxAttempts}회 재시도 중)`
+        );
+        continue;
+      }
+
+      throw e;
+    }
+  }
+}

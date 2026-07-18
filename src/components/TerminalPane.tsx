@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { api } from "../api";
+import { api, runWithSessionSecret } from "../api";
 import type { SshClosedEvent, SshOutputEvent } from "../types";
 
 interface Props {
@@ -52,7 +52,7 @@ export function TerminalPane({ serverId, sessionId, active, onStatus }: Props) {
       try {
         const cols = term.cols;
         const rows = term.rows;
-        await api.sshOpen(serverId, sessionId, cols, rows);
+        await runWithSessionSecret(serverId, () => api.sshOpen(serverId, sessionId, cols, rows));
         if (disposed) return;
         setBanner(null);
         onStatus?.("ready");

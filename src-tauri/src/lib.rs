@@ -1,32 +1,41 @@
+#[allow(dead_code)]
 mod env_secrets;
 mod infisical;
 mod local_fs;
 mod models;
+#[allow(dead_code)]
 mod secret_crypto;
 mod sftp;
 mod ssh;
 mod store;
 
-use env_secrets::{ensure_env_file, env_file_exists, get_env_value, upsert_env_value};
-use secret_crypto::{delete_server_secret, load_server_secret, save_server_secret};
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Mutex;
+use tauri::{AppHandle, Manager, State};
+use uuid::Uuid;
+
+use env_secrets::env_file_exists;
 use infisical::InfisicalClient;
 use models::{
     AuthType, CredentialSource, Favorite, FavoriteType, InfisicalConfig, RemoteFileEntry,
     RemoteTextContent, Server,
 };
+use secret_crypto::delete_server_secret;
 use sftp::SftpManager;
 use ssh::SshManager;
-use std::path::PathBuf;
-use std::sync::Mutex;
 use store::{client_secret_configured, save_client_secret, Store};
-use tauri::{AppHandle, Manager, State};
-use uuid::Uuid;
+
+/// Returned when password/key is not yet in process memory for this server.
+pub const SECRET_REQUIRED: &str = "SECRET_REQUIRED";
 
 struct AppState {
     store: Mutex<Store>,
     ssh: SshManager,
     sftp: SftpManager,
     infisical: InfisicalClient,
+    /// Per-server secrets kept only in RAM for this app process.
+    session_secrets: Mutex<HashMap<String, String>>,
 }
 
 fn err_string(e: impl std::fmt::Display) -> String {
@@ -68,17 +77,12 @@ struct UpsertServerInput {
     infisical_secret_path: String,
     #[serde(default)]
     infisical_secret_name: String,
-    /// Optional secret to write into the per-server `.env` (password or private key).
-    #[serde(default)]
-    secret_value: Option<String>,
 }
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpsertServerResult {
     server: Server,
-    env_file_created: bool,
-    env_file_path: String,
 }
 
 #[tauri::command]
@@ -86,17 +90,11 @@ fn upsert_server(
     state: State<'_, AppState>,
     input: UpsertServerInput,
 ) -> Result<UpsertServerResult, String> {
-    let is_new = input
-        .id
-        .as_ref()
-        .map(|s| s.is_empty())
-        .unwrap_or(true);
     let id = input
         .id
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    let mut env_file_path = input.env_file_path.trim().to_string();
     let env_key = if input.env_key.trim().is_empty() {
         match input.auth_type {
             AuthType::Password => "SSH_PASSWORD".to_string(),
@@ -105,32 +103,6 @@ fn upsert_server(
     } else {
         input.env_key.trim().to_string()
     };
-
-    let mut env_file_created = false;
-    if input.credential_source == CredentialSource::Env {
-        if env_file_path.is_empty() {
-            let store = state.store.lock().map_err(|e| e.to_string())?;
-            env_file_path = store
-                .suggest_env_file_path_with_host(&input.name, &input.host)
-                .display()
-                .to_string();
-        }
-        let path = std::path::Path::new(&env_file_path);
-        let secret = input
-            .secret_value
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        if let Some(value) = secret {
-            // OS keyring mirror + plaintext .env
-            save_server_secret(&id, value).map_err(err_string)?;
-            env_file_created = upsert_env_value(path, &env_key, value).map_err(err_string)?;
-        } else if is_new {
-            return Err("서버 암호(또는 개인키)를 입력하세요. .env 파일에 저장됩니다.".into());
-        } else {
-            env_file_created = ensure_env_file(path, &env_key).map_err(err_string)?;
-        }
-    }
 
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let log_collect_paths = store
@@ -146,7 +118,8 @@ fn upsert_server(
         username: input.username,
         auth_type: input.auth_type,
         credential_source: input.credential_source,
-        env_file_path: env_file_path.clone(),
+        // Default credentials are prompted on first connection and kept only in memory.
+        env_file_path: input.env_file_path.trim().to_string(),
         env_key,
         infisical_project_id: input.infisical_project_id,
         infisical_env: input.infisical_env,
@@ -155,11 +128,7 @@ fn upsert_server(
         log_collect_paths,
     };
     let server = store.upsert_server(server).map_err(err_string)?;
-    Ok(UpsertServerResult {
-        server,
-        env_file_created,
-        env_file_path,
-    })
+    Ok(UpsertServerResult { server })
 }
 
 #[tauri::command]
@@ -183,8 +152,39 @@ fn save_log_collect_paths(
 #[tauri::command]
 fn delete_server(state: State<'_, AppState>, id: String) -> Result<(), String> {
     let _ = delete_server_secret(&id);
+    if let Ok(mut map) = state.session_secrets.lock() {
+        map.remove(&id);
+    }
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     store.delete_server(&id).map_err(err_string)
+}
+
+#[tauri::command]
+fn set_session_secret(
+    state: State<'_, AppState>,
+    server_id: String,
+    secret: String,
+) -> Result<(), String> {
+    let secret = secret.trim().to_string();
+    if secret.is_empty() {
+        return Err("암호(또는 개인키)가 비어 있습니다".into());
+    }
+    let mut map = state.session_secrets.lock().map_err(|e| e.to_string())?;
+    map.insert(server_id, secret);
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_session_secret(state: State<'_, AppState>, server_id: String) -> Result<(), String> {
+    let mut map = state.session_secrets.lock().map_err(|e| e.to_string())?;
+    map.remove(&server_id);
+    Ok(())
+}
+
+#[tauri::command]
+fn has_session_secret(state: State<'_, AppState>, server_id: String) -> Result<bool, String> {
+    let map = state.session_secrets.lock().map_err(|e| e.to_string())?;
+    Ok(map.get(&server_id).map(|s| !s.is_empty()).unwrap_or(false))
 }
 
 #[tauri::command]
@@ -349,39 +349,13 @@ async fn test_infisical_connection(state: State<'_, AppState>) -> Result<(), Str
 
 async fn fetch_server_secret(state: &AppState, server: &Server) -> Result<String, String> {
     match server.credential_source {
+        // Default: ask once per process, keep in memory only (no .env).
         CredentialSource::Env => {
-            // Prefer plaintext .env; fall back to OS keyring.
-            let path = server.env_file_path.trim();
-            let key = if server.env_key.trim().is_empty() {
-                match server.auth_type {
-                    AuthType::Password => "SSH_PASSWORD",
-                    AuthType::PrivateKey => "SSH_PRIVATE_KEY",
-                }
-            } else {
-                server.env_key.trim()
-            };
-
-            if !path.is_empty() {
-                match get_env_value(std::path::Path::new(path), key) {
-                    Ok(secret) if !secret_crypto::is_encrypted(&secret) => {
-                        let _ = save_server_secret(&server.id, &secret);
-                        return Ok(secret);
-                    }
-                    Ok(_) => {
-                        return Err(
-                            "저장된 암호가 손상되었습니다. 서버 수정에서 실제 SSH 평문 암호를 다시 입력·저장하세요."
-                                .into(),
-                        );
-                    }
-                    Err(_) => { /* fall through to keyring */ }
-                }
+            let map = state.session_secrets.lock().map_err(|e| e.to_string())?;
+            match map.get(&server.id) {
+                Some(secret) if !secret.is_empty() => Ok(secret.clone()),
+                _ => Err(SECRET_REQUIRED.into()),
             }
-
-            if let Some(secret) = load_server_secret(&server.id).map_err(err_string)? {
-                return Ok(secret);
-            }
-
-            Err("자격 증명이 없습니다. 서버를 수정해 평문 SSH 암호를 다시 저장하세요.".into())
         }
         CredentialSource::Infisical => {
             let config = {
@@ -581,6 +555,65 @@ fn local_parent(path: String) -> String {
     local_fs::parent_path(&path)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn memory_server(id: &str) -> Server {
+        Server {
+            id: id.to_string(),
+            name: "test".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: 22,
+            username: "tester".to_string(),
+            auth_type: AuthType::Password,
+            credential_source: CredentialSource::Env,
+            env_file_path: String::new(),
+            env_key: String::new(),
+            infisical_project_id: String::new(),
+            infisical_env: String::new(),
+            infisical_secret_path: String::new(),
+            infisical_secret_name: String::new(),
+            log_collect_paths: Vec::new(),
+        }
+    }
+
+    fn test_state() -> AppState {
+        let dir = std::env::temp_dir().join(format!("servermanager-test-{}", Uuid::new_v4()));
+        AppState {
+            store: Mutex::new(Store::load(dir).expect("store")),
+            ssh: SshManager::new(),
+            sftp: SftpManager::new(),
+            infisical: InfisicalClient::new(),
+            session_secrets: Mutex::new(HashMap::new()),
+        }
+    }
+
+    #[tokio::test]
+    async fn memory_credentials_require_secret_before_first_connection() {
+        let state = test_state();
+        let server = memory_server("server-1");
+
+        let err = fetch_server_secret(&state, &server).await.unwrap_err();
+
+        assert_eq!(err, SECRET_REQUIRED);
+    }
+
+    #[tokio::test]
+    async fn memory_credentials_reuse_secret_for_same_process() {
+        let state = test_state();
+        let server = memory_server("server-1");
+        state
+            .session_secrets
+            .lock()
+            .unwrap()
+            .insert(server.id.clone(), "pw".to_string());
+
+        let secret = fetch_server_secret(&state, &server).await.unwrap();
+
+        assert_eq!(secret, "pw");
+    }
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = env_logger::try_init();
@@ -601,6 +634,7 @@ pub fn run() {
                 ssh: SshManager::new(),
                 sftp: SftpManager::new(),
                 infisical: InfisicalClient::new(),
+                session_secrets: Mutex::new(HashMap::new()),
             });
             Ok(())
         })
@@ -608,6 +642,9 @@ pub fn run() {
             list_servers,
             upsert_server,
             delete_server,
+            set_session_secret,
+            clear_session_secret,
+            has_session_secret,
             save_log_collect_paths,
             list_favorites,
             upsert_favorite,

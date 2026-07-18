@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../api";
 import type { AuthType, CredentialSource, Server } from "../types";
 
@@ -20,12 +19,6 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
   const [credentialSource, setCredentialSource] = useState<CredentialSource>(
     initial?.credentialSource ?? "env",
   );
-  const [envFilePath, setEnvFilePath] = useState(initial?.envFilePath ?? "");
-  const [envKey, setEnvKey] = useState(
-    initial?.envKey ||
-      (initial?.authType === "privateKey" ? "SSH_PRIVATE_KEY" : "SSH_PASSWORD"),
-  );
-  const [secretValue, setSecretValue] = useState("");
   const [projectId, setProjectId] = useState(
     initial?.infisicalProjectId || defaults?.projectId || "",
   );
@@ -37,7 +30,6 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
     initial?.infisicalSecretName || "SSH_PASSWORD",
   );
   const [error, setError] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -48,91 +40,16 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Auto-suggest `{englishName}.env` when creating / path empty
-  useEffect(() => {
-    if (credentialSource !== "env") return;
-    if (isEdit && initial?.envFilePath) return;
-    const n = name.trim();
-    const h = host.trim();
-    if (!n && !h) return;
-    let cancelled = false;
-    const t = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const path = await api.suggestEnvPath(n || "server", h);
-          if (!cancelled) {
-            setEnvFilePath(path);
-          }
-        } catch {
-          /* ignore suggest errors while typing */
-        }
-      })();
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(t);
-    };
-  }, [name, host, credentialSource, isEdit, initial?.envFilePath]);
-
-  const suggestPath = async () => {
-    const n = name.trim() || "server";
-    try {
-      const path = await api.suggestEnvPath(n, host.trim());
-      setEnvFilePath(path);
-      setMsg(`추천 경로: ${path}`);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
-  const pickEnvFile = async () => {
-    const selected = await open({
-      multiple: false,
-      title: "서버 .env 파일 선택",
-      filters: [{ name: "Env", extensions: ["env", "*"] }],
-    });
-    if (typeof selected === "string") {
-      setEnvFilePath(selected);
-    }
-  };
-
-  const testEnv = async () => {
-    setError(null);
-    setMsg(null);
-    try {
-      const result = await api.testEnvFile(envFilePath.trim());
-      setMsg(result);
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    setMsg(null);
     try {
-      if (credentialSource === "env" && !envKey.trim()) {
-        throw new Error(".env 키 이름을 입력하세요");
-      }
       if (credentialSource === "infisical" && !secretName.trim()) {
-        throw new Error("Infisical 시크릿 이름을 입력하세요");
-      }
-      if (credentialSource === "env" && !isEdit && !secretValue.trim()) {
-        throw new Error(
-          authType === "password"
-            ? "서버 암호를 입력하세요 (.env에 저장됩니다)"
-            : "개인키를 입력하세요 (.env에 저장됩니다)",
-        );
+        throw new Error("Infisical 시크릿 이름을 입력하세요.");
       }
 
-      let path = envFilePath.trim();
-      if (credentialSource === "env" && !path) {
-        path = await api.suggestEnvPath(name.trim() || "server", host.trim());
-        setEnvFilePath(path);
-      }
-
+      const envKey = authType === "privateKey" ? "SSH_PRIVATE_KEY" : "SSH_PASSWORD";
       const result = await api.upsertServer({
         id: initial?.id,
         name: name.trim(),
@@ -141,24 +58,13 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
         username: username.trim(),
         authType,
         credentialSource,
-        envFilePath: path,
-        envKey: envKey.trim(),
+        envFilePath: "",
+        envKey,
         infisicalProjectId: projectId.trim(),
         infisicalEnv: environment.trim(),
         infisicalSecretPath: secretPath.trim() || "/",
         infisicalSecretName: secretName.trim(),
-        secretValue: secretValue.trim() || undefined,
       });
-      if (result.envFilePath) {
-        setEnvFilePath(result.envFilePath);
-      }
-      if (secretValue.trim()) {
-        setMsg(`.env에 자격 증명을 저장했습니다: ${result.envFilePath}`);
-      } else if (result.envFileCreated) {
-        window.alert(
-          `.env 파일을 생성했습니다.\n${result.envFilePath}\n\n필요 시 파일을 열어 비밀값을 확인하세요.`,
-        );
-      }
       onSaved(result.server);
     } catch (err) {
       setError(String(err));
@@ -173,11 +79,11 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
         <h3>{isEdit ? "서버 수정" : "서버 추가"}</h3>
         <div className="form-grid">
           <div className="form-field">
-            <label>이름 (영문 권장 — .env 파일명에 사용)</label>
+            <label>이름</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="예: nh-web, ProdApi"
+              placeholder="예: ProdApi"
               required
             />
           </div>
@@ -211,10 +117,7 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
               onChange={(e) => {
                 const next = e.target.value as AuthType;
                 setAuthType(next);
-                if (!initial?.envKey) {
-                  setEnvKey(next === "privateKey" ? "SSH_PRIVATE_KEY" : "SSH_PASSWORD");
-                }
-                setSecretValue("");
+                setSecretName(next === "privateKey" ? "SSH_PRIVATE_KEY" : "SSH_PASSWORD");
               }}
             >
               <option value="password">비밀번호</option>
@@ -227,82 +130,19 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
               value={credentialSource}
               onChange={(e) => setCredentialSource(e.target.value as CredentialSource)}
             >
-              <option value="env">.env (서버별 파일)</option>
-              <option value="infisical">Infisical (선택)</option>
+              <option value="env">접속 시 입력(메모리)</option>
+              <option value="infisical">Infisical</option>
             </select>
           </div>
 
           {credentialSource === "env" ? (
-            <>
-              <div className="form-field">
-                <label>
-                  {authType === "password"
-                    ? isEdit
-                      ? "서버 암호 (입력 시 .env 갱신, 비우면 유지)"
-                      : "서버 암호 (.env에 저장)"
-                    : isEdit
-                      ? "개인키 (입력 시 .env 갱신, 비우면 유지)"
-                      : "개인키 (.env에 저장)"}
-                </label>
-                {authType === "password" ? (
-                  <input
-                    type="password"
-                    value={secretValue}
-                    onChange={(e) => setSecretValue(e.target.value)}
-                    autoComplete="new-password"
-                    placeholder={isEdit ? "변경할 때만 입력" : "SSH 평문 암호"}
-                    required={!isEdit}
-                  />
-                ) : (
-                  <textarea
-                    value={secretValue}
-                    onChange={(e) => setSecretValue(e.target.value)}
-                    placeholder={
-                      isEdit
-                        ? "변경할 때만 PEM 키를 붙여넣기"
-                        : "-----BEGIN OPENSSH PRIVATE KEY-----"
-                    }
-                    rows={5}
-                    required={!isEdit}
-                    style={{ fontFamily: "ui-monospace, Consolas, monospace", fontSize: 12 }}
-                  />
-                )}
-                <div className="msg" style={{ marginTop: 6, opacity: 0.85, fontSize: 12 }}>
-                  .env에 평문으로 저장됩니다. 이 파일을 커밋하지 마세요.
-                </div>
+            <div className="form-field">
+              <label>메모리 자격 증명</label>
+              <div className="msg" style={{ marginTop: 6, opacity: 0.9 }}>
+                암호 또는 개인키는 저장하지 않습니다. 서버별 최초 접속 시 한 번만 물어보고,
+                현재 앱 실행 중에만 메모리에 보관합니다.
               </div>
-              <div className="form-field">
-                <label>서버 전용 .env 경로 (영문서버명.env, 없으면 생성)</label>
-                <input
-                  value={envFilePath}
-                  onChange={(e) => setEnvFilePath(e.target.value)}
-                  placeholder="이름·호스트 기준으로 자동 추천"
-                  readOnly={!isEdit}
-                />
-                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                  <button type="button" className="btn" onClick={() => void suggestPath()}>
-                    경로 다시 추천
-                  </button>
-                  <button type="button" className="btn" onClick={() => void pickEnvFile()}>
-                    파일 선택
-                  </button>
-                  <button type="button" className="btn" onClick={() => void testEnv()}>
-                    .env 확인
-                  </button>
-                </div>
-              </div>
-              <div className="form-field">
-                <label>.env 키 이름</label>
-                <input
-                  value={envKey}
-                  onChange={(e) => setEnvKey(e.target.value)}
-                  placeholder={
-                    authType === "password" ? "SSH_PASSWORD" : "SSH_PRIVATE_KEY"
-                  }
-                  required
-                />
-              </div>
-            </>
+            </div>
           ) : (
             <>
               <div className="form-field">
@@ -332,14 +172,13 @@ export function ServerModal({ initial, defaults, onClose, onSaved }: Props) {
             </>
           )}
         </div>
-        {msg && <div className="msg ok">{msg}</div>}
         {error && <div className="msg error">{error}</div>}
         <div className="form-actions">
           <button type="button" className="btn" onClick={onClose}>
             취소
           </button>
           <button type="submit" className="btn primary" disabled={saving}>
-            {saving ? "저장 중…" : "저장"}
+            {saving ? "저장 중" : "저장"}
           </button>
         </div>
       </form>

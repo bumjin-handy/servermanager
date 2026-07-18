@@ -13,7 +13,7 @@ export interface Server {
   username: string;
   authType: AuthType;
   credentialSource: CredentialSource;
-  /** Absolute path to this server's dedicated .env file */
+  /** Legacy field; memory credentials do not use an env file. */
   envFilePath: string;
   envKey: string;
   infisicalProjectId: string;

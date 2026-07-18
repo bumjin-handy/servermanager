@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { RemoteTextContent, Server } from "../types";
-import { api } from "../api";
+import { api, runWithSessionSecret } from "../api";
 import { toNativeLocalPath } from "./fileManagerShared";
 import { TextViewerModal } from "./TextViewerModal";
 
@@ -106,7 +106,7 @@ export function LogCollectPanel({
     setCtxMenu(null);
     setTextLoading(true);
     try {
-      await api.sftpOpen(server.id);
+      await runWithSessionSecret(server.id, () => api.sftpOpen(server.id));
       const home = await api.sftpHome(server.id);
       const remotePath = `${home.replace(/\/$/, "")}/logs/${item.stamp}/${item.fileName}`;
       const content = await api.sftpReadText(server.id, remotePath);

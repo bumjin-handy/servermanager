@@ -82,7 +82,7 @@ impl SshManager {
 
         if !auth_ok.success() {
             bail!(
-                "SSH 인증이 거부되었습니다. 서버 수정에서 평문 암호를 다시 저장한 뒤 재시도하세요."
+                "AUTH_FAILED: SSH 인증이 거부되었습니다. 서버 수정에서 평문 암호를 다시 저장한 뒤 재시도하세요."
             );
         }
 
@@ -281,7 +281,7 @@ pub async fn connect_authenticated(server: &Server, secret: &str) -> Result<Hand
 
         if !auth_ok.success() {
             bail!(
-                "SSH 인증이 거부되었습니다. 서버 수정에서 평문 암호를 다시 저장한 뒤 재시도하세요."
+                "AUTH_FAILED: SSH 인증이 거부되었습니다. 서버 수정에서 평문 암호를 다시 저장한 뒤 재시도하세요."
             );
         }
 
