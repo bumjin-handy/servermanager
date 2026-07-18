@@ -227,6 +227,21 @@ button {
   display: grid;
 }
 
+.server-workspace {
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template: 1fr / 1fr;
+  min-height: 0;
+  min-width: 0;
+  z-index: 1;
+}
+
+.server-workspace.is-hidden {
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

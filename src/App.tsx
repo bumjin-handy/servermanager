@@ -18,6 +18,20 @@ import type { AppSettingsView, Server, WorkspacePane } from "./types";
 import { openPath } from "@tauri-apps/plugin-opener";
 import "./App.css";
 
+interface ServerWorkspace {
+  panes: WorkspacePane[];
+  activePaneId: string | null;
+  fileManagerOpen: boolean;
+  logCollectOpen: boolean;
+  logCollecting: boolean;
+  logOutputs: LogCollectOutput[];
+  logCollectStatus: string | null;
+  logCollectError: boolean;
+  logCollectSessionIds: string[];
+  logCollectDir: string | null;
+  pendingDownload: LogCollectOutput[] | null;
+}
+
 function isLogCollectPane(pane: WorkspacePane) {
   return pane.kind === "terminal" && (pane.title === "로그수집" || pane.title.startsWith("로그:"));
 }
@@ -32,6 +46,23 @@ function createTerminalPane(index: number, title?: string): WorkspacePane {
   };
 }
 
+function createEmptyWorkspace(): ServerWorkspace {
+  const term = createTerminalPane(1);
+  return {
+    panes: [term],
+    activePaneId: term.id,
+    fileManagerOpen: false,
+    logCollectOpen: false,
+    logCollecting: false,
+    logOutputs: [],
+    logCollectStatus: null,
+    logCollectError: false,
+    logCollectSessionIds: [],
+    logCollectDir: null,
+    pendingDownload: null,
+  };
+}
+
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -39,22 +70,12 @@ function sleep(ms: number) {
 function App() {
   const [servers, setServers] = useState<Server[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [panes, setPanes] = useState<WorkspacePane[]>([]);
-  const [activePaneId, setActivePaneId] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<Record<string, ServerWorkspace>>({});
   const [showServerModal, setShowServerModal] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [settings, setSettings] = useState<AppSettingsView | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [fileManagerOpen, setFileManagerOpen] = useState(false);
-  const [logCollectOpen, setLogCollectOpen] = useState(false);
-  const [logCollecting, setLogCollecting] = useState(false);
-  const [logOutputs, setLogOutputs] = useState<LogCollectOutput[]>([]);
-  const [logCollectStatus, setLogCollectStatus] = useState<string | null>(null);
-  const [logCollectError, setLogCollectError] = useState(false);
-  const [logCollectSessionIds, setLogCollectSessionIds] = useState<string[]>([]);
-  const [logCollectDir, setLogCollectDir] = useState<string | null>(null);
-  const [pendingDownload, setPendingDownload] = useState<LogCollectOutput[] | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -78,6 +99,36 @@ function App() {
   const selected = useMemo(
     () => servers.find((s) => s.id === selectedId) ?? null,
     [servers, selectedId],
+  );
+
+  const ws = selectedId ? workspaces[selectedId] : undefined;
+  const panes = ws?.panes ?? [];
+  const activePaneId = ws?.activePaneId ?? null;
+  const fileManagerOpen = ws?.fileManagerOpen ?? false;
+  const logCollectOpen = ws?.logCollectOpen ?? false;
+  const logCollecting = ws?.logCollecting ?? false;
+  const logOutputs = ws?.logOutputs ?? [];
+  const logCollectStatus = ws?.logCollectStatus ?? null;
+  const logCollectError = ws?.logCollectError ?? false;
+  const logCollectDir = ws?.logCollectDir ?? null;
+  const pendingDownload = ws?.pendingDownload ?? null;
+
+  const patchWorkspace = useCallback(
+    (serverId: string, updater: (current: ServerWorkspace) => ServerWorkspace) => {
+      setWorkspaces((prev) => {
+        const current = prev[serverId] ?? createEmptyWorkspace();
+        return { ...prev, [serverId]: updater(current) };
+      });
+    },
+    [],
+  );
+
+  const patchSelected = useCallback(
+    (updater: (current: ServerWorkspace) => ServerWorkspace) => {
+      if (!selectedId) return;
+      patchWorkspace(selectedId, updater);
+    },
+    [selectedId, patchWorkspace],
   );
 
   const activeTerminalSessionId = useMemo(() => {
@@ -131,73 +182,74 @@ function App() {
     })();
   }, []);
 
+  // Lazily create a workspace on first visit; never reset on switch.
   useEffect(() => {
-    if (!selectedId) {
-      setPanes([]);
-      setActivePaneId(null);
-      setFileManagerOpen(false);
-      setLogCollectOpen(false);
-      setLogCollecting(false);
-      setLogOutputs([]);
-      setLogCollectSessionIds([]);
-      setLogCollectDir(null);
-      setPendingDownload(null);
-      return;
-    }
-    const term = createTerminalPane(1);
-    setPanes([term]);
-    setActivePaneId(term.id);
-    setFileManagerOpen(false);
-    setLogCollectOpen(false);
-    setLogCollecting(false);
-    setLogOutputs([]);
-    setLogCollectSessionIds([]);
-    setLogCollectDir(null);
-    setPendingDownload(null);
-    setLogCollectStatus(null);
+    if (!selectedId) return;
+    setWorkspaces((prev) => {
+      if (prev[selectedId]) return prev;
+      return { ...prev, [selectedId]: createEmptyWorkspace() };
+    });
   }, [selectedId]);
 
   const openWorkspaceFor = (server: Server) => {
+    setWorkspaces((prev) =>
+      prev[server.id] ? prev : { ...prev, [server.id]: createEmptyWorkspace() },
+    );
     setSelectedId(server.id);
   };
 
   const addTerminal = () => {
-    setFileManagerOpen(false);
-    const count = panes.filter((p) => p.kind === "terminal").length + 1;
-    const pane = createTerminalPane(count);
-    setPanes((prev) => [...prev, pane]);
-    setActivePaneId(pane.id);
+    patchSelected((current) => {
+      const count = current.panes.filter((p) => p.kind === "terminal").length + 1;
+      const pane = createTerminalPane(count);
+      return {
+        ...current,
+        fileManagerOpen: false,
+        panes: [...current.panes, pane],
+        activePaneId: pane.id,
+      };
+    });
   };
 
   const toggleFileManager = () => {
-    setFileManagerOpen((open) => !open);
+    patchSelected((current) => ({
+      ...current,
+      fileManagerOpen: !current.fileManagerOpen,
+    }));
   };
 
   const addFavoritesPane = () => {
-    setFileManagerOpen(false);
-    if (panes.some((p) => p.kind === "favorites")) {
-      const existing = panes.find((p) => p.kind === "favorites");
-      if (existing) setActivePaneId(existing.id);
-      return;
-    }
-    const pane: WorkspacePane = {
-      id: uuid(),
-      kind: "favorites",
-      title: "즐겨찾기",
-    };
-    setPanes((prev) => [...prev, pane]);
-    setActivePaneId(pane.id);
+    patchSelected((current) => {
+      const existing = current.panes.find((p) => p.kind === "favorites");
+      if (existing) {
+        return { ...current, fileManagerOpen: false, activePaneId: existing.id };
+      }
+      const pane: WorkspacePane = {
+        id: uuid(),
+        kind: "favorites",
+        title: "즐겨찾기",
+      };
+      return {
+        ...current,
+        fileManagerOpen: false,
+        panes: [...current.panes, pane],
+        activePaneId: pane.id,
+      };
+    });
   };
 
   const ensureParallelLogTerminals = (titles: string[]): string[] => {
     const panesToAdd = titles.map((title) => createTerminalPane(0, title));
     const sessionIds = panesToAdd.map((p) => p.sessionId!);
-    setPanes((prev) => {
-      const kept = prev.filter((p) => !isLogCollectPane(p));
-      return [...kept, ...panesToAdd];
+    patchSelected((current) => {
+      const kept = current.panes.filter((p) => !isLogCollectPane(p));
+      return {
+        ...current,
+        panes: [...kept, ...panesToAdd],
+        activePaneId: panesToAdd[0]?.id ?? current.activePaneId,
+        logCollectSessionIds: sessionIds,
+      };
     });
-    if (panesToAdd[0]) setActivePaneId(panesToAdd[0].id);
-    setLogCollectSessionIds(sessionIds);
     return sessionIds;
   };
 
@@ -205,18 +257,24 @@ function App() {
     if (!selected) return;
     const server = await api.saveLogCollectPaths(selected.id, paths);
     setServers((prev) => prev.map((s) => (s.id === server.id ? server : s)));
-    setLogCollectStatus("로그 경로를 저장했습니다");
-    setLogCollectError(false);
+    patchSelected((current) => ({
+      ...current,
+      logCollectStatus: "로그 경로를 저장했습니다",
+      logCollectError: false,
+    }));
   };
 
   const startLogCollect = async (paths: string[]) => {
     if (!selected) return;
     if (paths.length === 0) {
-      setLogCollectStatus("로그 경로를 입력하세요");
-      setLogCollectError(true);
+      patchSelected((current) => ({
+        ...current,
+        logCollectStatus: "로그 경로를 입력하세요",
+        logCollectError: true,
+      }));
       return;
     }
-    setFileManagerOpen(false);
+    patchSelected((current) => ({ ...current, fileManagerOpen: false }));
     await saveLogPaths(paths);
 
     const stamp = new Date();
@@ -235,25 +293,27 @@ function App() {
       fileName: p.fileName,
       stamp: stampStr,
     }));
-    setLogOutputs(outputs);
-    setLogCollectDir(collectDir);
-    setLogCollecting(true);
-    setLogCollectStatus(
-      `${outputs.length}개 로그 병렬 수집 시작 · 저장: ${collectDir}`,
-    );
-    setLogCollectError(false);
+    patchSelected((current) => ({
+      ...current,
+      logOutputs: outputs,
+      logCollectDir: collectDir,
+      logCollecting: true,
+      logCollectStatus: `${outputs.length}개 로그 병렬 수집 시작 · 저장: ${collectDir}`,
+      logCollectError: false,
+    }));
   };
 
   const closeLogCollectPanes = () => {
-    setPanes((prev) => {
-      const next = prev.filter((p) => !isLogCollectPane(p));
-      setActivePaneId((cur) => {
-        if (next.some((p) => p.id === cur)) return cur;
-        return next[0]?.id ?? null;
-      });
-      return next;
+    patchSelected((current) => {
+      const next = current.panes.filter((p) => !isLogCollectPane(p));
+      const activeStillThere = next.some((p) => p.id === current.activePaneId);
+      return {
+        ...current,
+        panes: next,
+        activePaneId: activeStillThere ? current.activePaneId : (next[0]?.id ?? null),
+        logCollectSessionIds: [],
+      };
     });
-    setLogCollectSessionIds([]);
   };
 
   const downloadCollectedLogs = async (
@@ -262,8 +322,11 @@ function App() {
   ) => {
     if (!selected || outputs.length === 0 || !localDir.trim()) return;
     const stamp = outputs[0]!.stamp;
-    setLogCollectStatus("로그 파일 다운로드 중…");
-    setLogCollectError(false);
+    patchSelected((current) => ({
+      ...current,
+      logCollectStatus: "로그 파일 다운로드 중…",
+      logCollectError: false,
+    }));
     try {
       await runWithSessionSecret(selected.id, () => api.sftpOpen(selected.id));
       const remoteHome = await api.sftpHome(selected.id);
@@ -276,26 +339,39 @@ function App() {
         await api.sftpDownload(selected.id, remotePath, localPath);
       }
 
-      setLogCollectStatus(`다운로드 완료 (${outputs.length}개) → ${dir}`);
+      patchSelected((current) => ({
+        ...current,
+        logCollectStatus: `다운로드 완료 (${outputs.length}개) → ${dir}`,
+      }));
     } catch (e) {
-      setLogCollectStatus(String(e));
-      setLogCollectError(true);
+      patchSelected((current) => ({
+        ...current,
+        logCollectStatus: String(e),
+        logCollectError: true,
+      }));
     }
   };
 
   const stopLogCollect = async (): Promise<LogCollectOutput[]> => {
+    if (!selectedId) return [];
+    const current = workspaces[selectedId];
+    if (!current) return [];
+
     const sessionIds =
-      logCollectSessionIds.length > 0
-        ? logCollectSessionIds
-        : panes.filter(isLogCollectPane).map((p) => p.sessionId!).filter(Boolean);
+      current.logCollectSessionIds.length > 0
+        ? current.logCollectSessionIds
+        : current.panes.filter(isLogCollectPane).map((p) => p.sessionId!).filter(Boolean);
 
     if (sessionIds.length === 0) {
-      setLogCollectStatus("로그수집 터미널을 찾을 수 없습니다");
-      setLogCollectError(true);
+      patchSelected((wsState) => ({
+        ...wsState,
+        logCollectStatus: "로그수집 터미널을 찾을 수 없습니다",
+        logCollectError: true,
+      }));
       return [];
     }
 
-    const outputsSnapshot = [...logOutputs];
+    const outputsSnapshot = [...current.logOutputs];
 
     // Ctrl+C to every collect session in parallel
     await Promise.all(sessionIds.map((id) => sendCtrlC(id)));
@@ -303,46 +379,59 @@ function App() {
     await Promise.all(sessionIds.map((id) => sendCtrlC(id)));
     await sleep(300);
 
-    setLogCollecting(false);
     closeLogCollectPanes();
-
-    setLogCollectStatus(
-      outputsSnapshot.length > 0
-        ? `수집 종료 · 생성 파일: ${outputsSnapshot.map((o) => o.outputFile).join(", ")}`
-        : "수집 종료",
-    );
-    setLogCollectError(false);
+    patchSelected((wsState) => ({
+      ...wsState,
+      logCollecting: false,
+      logCollectStatus:
+        outputsSnapshot.length > 0
+          ? `수집 종료 · 생성 파일: ${outputsSnapshot.map((o) => o.outputFile).join(", ")}`
+          : "수집 종료",
+      logCollectError: false,
+    }));
     // Download only after explicit user confirmation in LogCollectPanel
     return outputsSnapshot;
   };
 
   const closePane = (id: string) => {
-    const closing = panes.find((p) => p.id === id);
-    if (closing && isLogCollectPane(closing) && logCollecting) {
+    if (!selectedId) return;
+    const current = workspaces[selectedId];
+    const closing = current?.panes.find((p) => p.id === id);
+    if (closing && isLogCollectPane(closing) && current?.logCollecting) {
       void (async () => {
         const outs = await stopLogCollect();
         if (outs.length > 0) {
-          setPendingDownload(outs);
-          setLogCollectOpen(true);
+          patchSelected((wsState) => ({
+            ...wsState,
+            pendingDownload: outs,
+            logCollectOpen: true,
+          }));
         }
       })();
       return;
     }
-    setPanes((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      if (activePaneId === id) {
-        setActivePaneId(next[0]?.id ?? null);
-      }
-      return next;
+    patchSelected((wsState) => {
+      const next = wsState.panes.filter((p) => p.id !== id);
+      return {
+        ...wsState,
+        panes: next,
+        activePaneId:
+          wsState.activePaneId === id ? (next[0]?.id ?? null) : wsState.activePaneId,
+      };
     });
   };
 
   const openNewTerminalSession = async (): Promise<string | null> => {
-    setFileManagerOpen(false);
-    const count = panes.filter((p) => p.kind === "terminal").length + 1;
+    if (!selectedId) return null;
+    const count =
+      (workspaces[selectedId]?.panes.filter((p) => p.kind === "terminal").length ?? 0) + 1;
     const pane = createTerminalPane(count);
-    setPanes((prev) => [...prev, pane]);
-    setActivePaneId(pane.id);
+    patchSelected((current) => ({
+      ...current,
+      fileManagerOpen: false,
+      panes: [...current.panes, pane],
+      activePaneId: pane.id,
+    }));
     // Allow SSH session to connect before sending commands
     await sleep(1500);
     return pane.sessionId ?? null;
@@ -389,12 +478,135 @@ function App() {
     }
   };
 
+  const closeServerWorkspace = async (serverId: string) => {
+    const closing = workspaces[serverId];
+    if (closing) {
+      await Promise.all(
+        closing.panes
+          .filter((p) => p.sessionId)
+          .map((p) => api.sshClose(p.sessionId!).catch(() => undefined)),
+      );
+      await api.sftpClose(serverId).catch(() => undefined);
+      await api.clearSessionSecret(serverId).catch(() => undefined);
+    }
+    setWorkspaces((prev) => {
+      const next = { ...prev };
+      delete next[serverId];
+      return next;
+    });
+  };
+
   const deleteSelectedServer = async () => {
     if (!selected) return;
     if (!window.confirm(`"${selected.name}" 서버를 삭제할까요?`)) return;
-    await api.deleteServer(selected.id);
+    const serverId = selected.id;
+    await closeServerWorkspace(serverId);
+    await api.deleteServer(serverId);
     const list = await reloadServers();
     setSelectedId(list[0]?.id ?? null);
+  };
+
+  const renderServerWorkspace = (server: Server, workspace: ServerWorkspace, visible: boolean) => {
+    const visiblePanes = workspace.panes.filter((p) => p.kind !== "files");
+    return (
+      <div
+        key={server.id}
+        className={`server-workspace${visible ? "" : " is-hidden"}`}
+        aria-hidden={!visible}
+      >
+        <div
+          className={`workspace${workspace.fileManagerOpen ? " is-obscured" : ""}`}
+          aria-hidden={workspace.fileManagerOpen}
+        >
+          {workspace.panes.length === 0 ? (
+            <div className="empty-state">
+              <p>패널이 없습니다. 새 터미널을 열어보세요.</p>
+            </div>
+          ) : (
+            <Group orientation="horizontal" id={`workspace-h-${server.id}`}>
+              {visiblePanes.map((pane, index) => (
+                <Fragment key={pane.id}>
+                  {index > 0 && <Separator className="resize-handle" />}
+                  <Panel
+                    id={pane.id}
+                    defaultSize={`${Math.max(20, Math.floor(100 / Math.max(1, visiblePanes.length)))}`}
+                    minSize="15"
+                  >
+                    <div
+                      className={`pane-shell${workspace.activePaneId === pane.id ? " active" : ""}`}
+                      onMouseDown={() => {
+                        if (!visible) return;
+                        patchWorkspace(server.id, (current) => ({
+                          ...current,
+                          activePaneId: pane.id,
+                        }));
+                      }}
+                    >
+                      <div className="pane-header">
+                        <span className="title">{pane.title}</span>
+                        <button
+                          className="icon-btn"
+                          type="button"
+                          title="닫기"
+                          onClick={() => {
+                            if (visible) closePane(pane.id);
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      {pane.kind === "terminal" && pane.sessionId && (
+                        <TerminalPane
+                          serverId={server.id}
+                          sessionId={pane.sessionId}
+                          active={
+                            visible &&
+                            !workspace.fileManagerOpen &&
+                            workspace.activePaneId === pane.id
+                          }
+                        />
+                      )}
+                      {pane.kind === "favorites" && (
+                        <FavoritesPanel
+                          serverId={server.id}
+                          onRunCommand={onRunCommand}
+                          onGoPath={onGoPath}
+                        />
+                      )}
+                    </div>
+                  </Panel>
+                </Fragment>
+              ))}
+            </Group>
+          )}
+        </div>
+
+        {workspace.fileManagerOpen && (
+          <div className="file-manager-layer">
+            <div className="file-manager-layer-bar">
+              <strong>파일 관리자</strong>
+              <span className="muted">터미널 세션은 백그라운드에서 유지됩니다</span>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  if (!visible) return;
+                  patchWorkspace(server.id, (current) => ({
+                    ...current,
+                    fileManagerOpen: false,
+                  }));
+                }}
+              >
+                숨김 (터미널로)
+              </button>
+            </div>
+            <div className="file-manager-layer-body">
+              <FilesPane serverId={server.id} />
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -485,7 +697,9 @@ function App() {
               <button
                 className={`btn${logCollectOpen || logCollecting ? " primary" : ""}`}
                 type="button"
-                onClick={() => setLogCollectOpen(true)}
+                onClick={() =>
+                  patchSelected((current) => ({ ...current, logCollectOpen: true }))
+                }
               >
                 로그수집{logCollecting ? " ●" : ""}
               </button>
@@ -497,81 +711,11 @@ function App() {
               </button>
             </div>
             <div className="main-body">
-              <div
-                className={`workspace${fileManagerOpen ? " is-obscured" : ""}`}
-                aria-hidden={fileManagerOpen}
-              >
-                {panes.length === 0 ? (
-                  <div className="empty-state">
-                    <p>패널이 없습니다. 새 터미널을 열어보세요.</p>
-                  </div>
-                ) : (
-                  <Group orientation="horizontal" id="workspace-h">
-                    {panes
-                      .filter((p) => p.kind !== "files")
-                      .map((pane, index) => (
-                        <Fragment key={pane.id}>
-                          {index > 0 && <Separator className="resize-handle" />}
-                          <Panel
-                            id={pane.id}
-                            defaultSize={`${Math.max(20, Math.floor(100 / Math.max(1, panes.filter((p) => p.kind !== "files").length)))}`}
-                            minSize="15"
-                          >
-                            <div
-                              className={`pane-shell${activePaneId === pane.id ? " active" : ""}`}
-                              onMouseDown={() => setActivePaneId(pane.id)}
-                            >
-                              <div className="pane-header">
-                                <span className="title">{pane.title}</span>
-                                <button
-                                  className="icon-btn"
-                                  type="button"
-                                  title="닫기"
-                                  onClick={() => closePane(pane.id)}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                              {pane.kind === "terminal" && pane.sessionId && (
-                                <TerminalPane
-                                  serverId={selected.id}
-                                  sessionId={pane.sessionId}
-                                  active={!fileManagerOpen && activePaneId === pane.id}
-                                />
-                              )}
-                              {pane.kind === "favorites" && (
-                                <FavoritesPanel
-                                  serverId={selected.id}
-                                  onRunCommand={onRunCommand}
-                                  onGoPath={onGoPath}
-                                />
-                              )}
-                            </div>
-                          </Panel>
-                        </Fragment>
-                      ))}
-                  </Group>
-                )}
-              </div>
-
-              {fileManagerOpen && (
-                <div className="file-manager-layer">
-                  <div className="file-manager-layer-bar">
-                    <strong>파일 관리자</strong>
-                    <span className="muted">터미널 세션은 백그라운드에서 유지됩니다</span>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setFileManagerOpen(false)}
-                    >
-                      숨김 (터미널로)
-                    </button>
-                  </div>
-                  <div className="file-manager-layer-body">
-                    <FilesPane serverId={selected.id} />
-                  </div>
-                </div>
-              )}
+              {Object.entries(workspaces).map(([serverId, workspace]) => {
+                const server = servers.find((s) => s.id === serverId);
+                if (!server) return null;
+                return renderServerWorkspace(server, workspace, serverId === selectedId);
+              })}
             </div>
           </>
         )}
@@ -622,13 +766,17 @@ function App() {
           workingDirHint={logCollectDir}
           status={logCollectStatus}
           error={logCollectError}
-          onClose={() => setLogCollectOpen(false)}
+          onClose={() =>
+            patchSelected((current) => ({ ...current, logCollectOpen: false }))
+          }
           onSavePaths={saveLogPaths}
           onStart={startLogCollect}
           onStop={stopLogCollect}
           onDownload={downloadCollectedLogs}
           pendingDownload={pendingDownload}
-          onClearPendingDownload={() => setPendingDownload(null)}
+          onClearPendingDownload={() =>
+            patchSelected((current) => ({ ...current, pendingDownload: null }))
+          }
         />
       )}
 
