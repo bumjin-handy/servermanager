@@ -58,6 +58,7 @@ export function LogCollectPanel({
   const [copiedPath, setCopiedPath] = useState(false);
   const [textView, setTextView] = useState<RemoteTextContent | null>(null);
   const [textLoading, setTextLoading] = useState(false);
+  const [editorMenuOpen, setEditorMenuOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{
     x: number;
     y: number;
@@ -88,6 +89,18 @@ export function LogCollectPanel({
     }
   };
 
+  const openWithEditor = async (
+    path: string,
+    editor: "cursor" | "vscode" | "editplus",
+  ) => {
+    setEditorMenuOpen(false);
+    try {
+      await api.openLocalWithEditor(toNativeLocalPath(path), editor);
+    } catch (e) {
+      window.alert(String(e));
+    }
+  };
+
   useEffect(() => {
     if (!ctxMenu) return;
     const close = () => setCtxMenu(null);
@@ -101,6 +114,24 @@ export function LogCollectPanel({
       window.removeEventListener("keydown", onKey);
     };
   }, [ctxMenu]);
+
+  useEffect(() => {
+    if (!editorMenuOpen) return;
+    const close = () => setEditorMenuOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [editorMenuOpen]);
+
+  useEffect(() => {
+    if (!downloadPathFromStatus) setEditorMenuOpen(false);
+  }, [downloadPathFromStatus]);
 
   const openOutputAsText = async (item: LogCollectOutput) => {
     setCtxMenu(null);
@@ -379,14 +410,86 @@ export function LogCollectPanel({
                 )}
               </span>
               {downloadPathFromStatus && (
-                <button
-                  type="button"
-                  className="btn log-copy-path-btn"
-                  title="경로 복사"
-                  onClick={() => void copyPath(downloadPathFromStatus)}
-                >
-                  {copiedPath ? "복사됨" : "경로 복사"}
-                </button>
+                <div className="log-status-actions">
+                  <button
+                    type="button"
+                    className="btn log-copy-path-btn"
+                    title="경로 복사"
+                    onClick={() => void copyPath(downloadPathFromStatus)}
+                  >
+                    {copiedPath ? "복사됨" : "경로 복사"}
+                  </button>
+                  <div className="log-editor-menu-wrap">
+                    <button
+                      type="button"
+                      className="icon-btn log-open-editor-btn"
+                      title="에디터로 열기"
+                      aria-label="에디터로 열기"
+                      aria-expanded={editorMenuOpen}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditorMenuOpen((v) => !v);
+                      }}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        width="14"
+                        height="14"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                        <line x1="10" y1="9" x2="8" y2="9" />
+                      </svg>
+                    </button>
+                    {editorMenuOpen && (
+                      <div
+                        className="context-menu log-editor-menu"
+                        role="menu"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="context-menu-item"
+                          role="menuitem"
+                          onClick={() =>
+                            void openWithEditor(downloadPathFromStatus, "cursor")
+                          }
+                        >
+                          Cursor로 열기
+                        </button>
+                        <button
+                          type="button"
+                          className="context-menu-item"
+                          role="menuitem"
+                          onClick={() =>
+                            void openWithEditor(downloadPathFromStatus, "vscode")
+                          }
+                        >
+                          VS Code로 열기
+                        </button>
+                        <button
+                          type="button"
+                          className="context-menu-item"
+                          role="menuitem"
+                          onClick={() =>
+                            void openWithEditor(downloadPathFromStatus, "editplus")
+                          }
+                        >
+                          EditPlus로 열기
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}

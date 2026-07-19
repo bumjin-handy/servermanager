@@ -2,6 +2,7 @@ use crate::models::RemoteFileEntry;
 use anyhow::{bail, Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// Virtual root that lists all local drives / mount points.
 pub const COMPUTER_ROOT: &str = "";
@@ -126,5 +127,121 @@ pub fn parent_path(path: &str) -> String {
             }
         }
         None => COMPUTER_ROOT.to_string(),
+    }
+}
+
+/// Open a local path in an external editor. `editor`: `cursor` | `vscode` | `editplus`
+pub fn open_with_editor(path: &Path, editor: &str) -> Result<()> {
+    if !path.exists() {
+        bail!("경로가 없습니다: {}", path.display());
+    }
+
+    let candidates = editor_candidates(editor)?;
+    let mut last_err = None;
+    for program in candidates {
+        match spawn_detached(&program, path) {
+            Ok(()) => return Ok(()),
+            Err(e) => last_err = Some(e),
+        }
+    }
+
+    bail!(
+        "{} 실행 실패: {}",
+        editor_label(editor),
+        last_err
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| "실행 파일을 찾을 수 없습니다".into())
+    )
+}
+
+fn editor_label(editor: &str) -> &'static str {
+    match editor {
+        "cursor" => "Cursor",
+        "vscode" => "VS Code",
+        "editplus" => "EditPlus",
+        _ => "에디터",
+    }
+}
+
+fn editor_candidates(editor: &str) -> Result<Vec<PathBuf>> {
+    let mut list = Vec::new();
+    match editor {
+        "cursor" => {
+            list.push(PathBuf::from("cursor"));
+            if let Some(local) = dirs::data_local_dir() {
+                list.push(
+                    local
+                        .join("Programs")
+                        .join("cursor")
+                        .join("resources")
+                        .join("app")
+                        .join("bin")
+                        .join(if cfg!(windows) { "cursor.cmd" } else { "cursor" }),
+                );
+            }
+        }
+        "vscode" => {
+            list.push(PathBuf::from("code"));
+            if let Some(local) = dirs::data_local_dir() {
+                list.push(
+                    local
+                        .join("Programs")
+                        .join("Microsoft VS Code")
+                        .join("bin")
+                        .join(if cfg!(windows) { "code.cmd" } else { "code" }),
+                );
+            }
+            #[cfg(windows)]
+            {
+                list.push(PathBuf::from(
+                    r"C:\Program Files\Microsoft VS Code\bin\code.cmd",
+                ));
+            }
+        }
+        "editplus" => {
+            list.push(PathBuf::from("editplus"));
+            #[cfg(windows)]
+            {
+                list.push(PathBuf::from(r"C:\Program Files\EditPlus\editplus.exe"));
+                list.push(PathBuf::from(r"C:\Program Files (x86)\EditPlus\editplus.exe"));
+                if let Some(local) = dirs::data_local_dir() {
+                    list.push(local.join("Programs").join("EditPlus").join("editplus.exe"));
+                }
+            }
+        }
+        _ => bail!("지원하지 않는 에디터입니다: {editor}"),
+    }
+    Ok(list)
+}
+
+fn spawn_detached(program: &Path, path: &Path) -> Result<()> {
+    // PATH에만 있는 이름(cursor/code)은 exists()가 false여도 시도한다.
+    let is_bare_name = program.components().count() == 1;
+    if !is_bare_name && !program.exists() {
+        bail!("없음: {}", program.display());
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        // .cmd 런처(cursor/code)는 cmd start로 띄워야 안정적이다.
+        Command::new("cmd")
+            .args(["/C", "start", "", "/B"])
+            .arg(program)
+            .arg(path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .with_context(|| format!("실행 실패: {}", program.display()))?;
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        Command::new(program)
+            .arg(path)
+            .spawn()
+            .with_context(|| format!("실행 실패: {}", program.display()))?;
+        Ok(())
     }
 }

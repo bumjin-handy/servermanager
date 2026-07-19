@@ -93,6 +93,8 @@ export const api = {
   localList: (path: string) =>
     invoke<RemoteFileEntry[]>("local_list", { path }),
   localParent: (path: string) => invoke<string>("local_parent", { path }),
+  openLocalWithEditor: (path: string, editor: "cursor" | "vscode" | "editplus") =>
+    invoke<void>("open_local_with_editor", { path, editor }),
 };
 
 export function isSecretRequired(error: unknown) {

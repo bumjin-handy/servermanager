@@ -555,6 +555,11 @@ fn local_parent(path: String) -> String {
     local_fs::parent_path(&path)
 }
 
+#[tauri::command]
+fn open_local_with_editor(path: String, editor: String) -> Result<(), String> {
+    local_fs::open_with_editor(std::path::Path::new(&path), &editor).map_err(err_string)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -673,6 +678,7 @@ pub fn run() {
             local_drives,
             local_list,
             local_parent,
+            open_local_with_editor,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
