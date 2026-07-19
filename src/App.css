@@ -69,8 +69,22 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 14px 14px 10px;
   border-bottom: 1px solid var(--border);
+}
+
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sidebar-header-actions .btn {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
 }
 
 .sidebar-header h1 {
@@ -1247,4 +1261,229 @@ button {
 
 .password-toggle-btn:hover {
   color: var(--text);
+}
+
+/* SQL Bind */
+.sqlbind-modal {
+  width: min(920px, 100%);
+  max-height: min(92vh, 900px);
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 12px;
+}
+
+.sqlbind-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.sqlbind-workflow {
+  margin: 0 0 4px;
+}
+
+.sqlbind-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sqlbind-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.sqlbind-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  font-size: 11px;
+}
+
+.sqlbind-step.is-current {
+  border-color: var(--success);
+  color: var(--text);
+  background: rgba(63, 185, 80, 0.12);
+}
+
+.sqlbind-step.is-current .sqlbind-step-num {
+  background: var(--success);
+  color: #0d1117;
+}
+
+.sqlbind-step.is-done:not(.is-current) {
+  border-color: rgba(63, 185, 80, 0.45);
+  color: var(--success);
+}
+
+.sqlbind-hint,
+.sqlbind-privacy,
+.sqlbind-help {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.sqlbind-hint strong,
+.sqlbind-help strong {
+  color: var(--text);
+}
+
+.sqlbind-privacy {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  margin-bottom: 4px;
+}
+
+.sqlbind-log-header,
+.sqlbind-label-row,
+.sqlbind-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sqlbind-label-row .field-label,
+.sqlbind-log-header .field-label {
+  margin: 0;
+}
+
+.sqlbind-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.sqlbind-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sqlbind-select,
+.sqlbind-param-input,
+.sqlbind-textarea {
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.sqlbind-select {
+  width: auto;
+  min-width: 140px;
+  height: 30px;
+}
+
+.sqlbind-textarea {
+  resize: vertical;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  line-height: 1.4;
+}
+
+.sqlbind-log {
+  min-height: 100px;
+}
+
+.sqlbind-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 6px 0;
+}
+
+.sqlbind-msg {
+  margin-top: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.sqlbind-msg.error {
+  border-color: rgba(248, 81, 73, 0.45);
+  background: rgba(248, 81, 73, 0.1);
+}
+
+.sqlbind-msg.ok {
+  border-color: rgba(63, 185, 80, 0.45);
+  background: rgba(63, 185, 80, 0.1);
+}
+
+.sqlbind-param-list,
+.sqlbind-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.sqlbind-param-list h4,
+.sqlbind-result h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.sqlbind-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.sqlbind-table th,
+.sqlbind-table td {
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.sqlbind-table th {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.sqlbind-table .sqlbind-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.sqlbind-param-input {
+  min-width: 0;
+}
+
+.sqlbind-result-output {
+  min-height: 120px;
+  background: #0d1117;
 }

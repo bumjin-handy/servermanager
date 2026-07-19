@@ -12,6 +12,7 @@ import {
 } from "./components/LogCollectPanel";
 import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
+import { SqlBindPanel } from "./components/SqlBindPanel";
 import { TerminalPane, sendCtrlC, writeToSession } from "./components/TerminalPane";
 import { joinLocal, toNativeLocalPath } from "./components/fileManagerShared";
 import type { AppSettingsView, Server, WorkspacePane } from "./types";
@@ -74,6 +75,7 @@ function App() {
   const [showServerModal, setShowServerModal] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSqlBind, setShowSqlBind] = useState(false);
   const [settings, setSettings] = useState<AppSettingsView | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -614,17 +616,27 @@ function App() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <h1>Workspace</h1>
-          <button
-            className="icon-btn"
-            type="button"
-            title="서버 추가"
-            onClick={() => {
-              setEditingServer(null);
-              setShowServerModal(true);
-            }}
-          >
-            +
-          </button>
+          <div className="sidebar-header-actions">
+            <button
+              className={`btn${showSqlBind ? " primary" : ""}`}
+              type="button"
+              title="SQL Bind"
+              onClick={() => setShowSqlBind(true)}
+            >
+              SQL Bind
+            </button>
+            <button
+              className="icon-btn"
+              type="button"
+              title="서버 추가"
+              onClick={() => {
+                setEditingServer(null);
+                setShowServerModal(true);
+              }}
+            >
+              +
+            </button>
+          </div>
         </div>
         <div className="server-list">
           {servers.length === 0 && (
@@ -703,6 +715,13 @@ function App() {
               >
                 로그수집{logCollecting ? " ●" : ""}
               </button>
+              <button
+                className={`btn${showSqlBind ? " primary" : ""}`}
+                type="button"
+                onClick={() => setShowSqlBind(true)}
+              >
+                SQL Bind
+              </button>
               <button className="btn" type="button" onClick={addFavoritesPane}>
                 즐겨찾기
               </button>
@@ -743,6 +762,8 @@ function App() {
           onSaved={(cfg) => setSettings(cfg)}
         />
       )}
+
+      {showSqlBind && <SqlBindPanel onClose={() => setShowSqlBind(false)} />}
 
       {secretPrompt && (
         <SecretPromptModal
