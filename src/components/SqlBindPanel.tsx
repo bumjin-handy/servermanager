@@ -327,8 +327,8 @@ export function SqlBindPanel({ onClose }: Props) {
           </div>
           <textarea
             id="sqlbind-sql"
-            className="sqlbind-textarea"
-            rows={3}
+            className="sqlbind-textarea sqlbind-sql"
+            rows={8}
             value={sql}
             onChange={(e) => setSql(e.target.value)}
             placeholder="SELECT * FROM emp WHERE name=? AND birthdate=?"
@@ -339,8 +339,8 @@ export function SqlBindPanel({ onClose }: Props) {
           </label>
           <textarea
             id="sqlbind-params"
-            className="sqlbind-textarea"
-            rows={2}
+            className="sqlbind-textarea sqlbind-params"
+            rows={4}
             value={paramText}
             onChange={(e) => setParamText(e.target.value)}
             placeholder="[JOHN, 2025-10-16 08:45:56.0]"
@@ -351,8 +351,8 @@ export function SqlBindPanel({ onClose }: Props) {
           </label>
           <textarea
             id="sqlbind-types"
-            className="sqlbind-textarea"
-            rows={2}
+            className="sqlbind-textarea sqlbind-types"
+            rows={4}
             value={typesText}
             onChange={(e) => setTypesText(e.target.value)}
             placeholder="[java.lang.String, java.util.Date]"

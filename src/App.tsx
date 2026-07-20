@@ -13,6 +13,7 @@ import {
 import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { SqlBindPanel } from "./components/SqlBindPanel";
+import { ApprovalToolPanel } from "./components/ApprovalToolPanel";
 import { TerminalPane, sendCtrlC, writeToSession } from "./components/TerminalPane";
 import { joinLocal, toNativeLocalPath } from "./components/fileManagerShared";
 import type { AppSettingsView, Server, WorkspacePane } from "./types";
@@ -76,6 +77,8 @@ function App() {
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showSqlBind, setShowSqlBind] = useState(false);
+  const [showApprovalTool, setShowApprovalTool] = useState(false);
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettingsView | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -618,14 +621,6 @@ function App() {
           <h1>Workspace</h1>
           <div className="sidebar-header-actions">
             <button
-              className={`btn${showSqlBind ? " primary" : ""}`}
-              type="button"
-              title="SQL Bind"
-              onClick={() => setShowSqlBind(true)}
-            >
-              SQL Bind
-            </button>
-            <button
               className="icon-btn"
               type="button"
               title="서버 추가"
@@ -699,13 +694,51 @@ function App() {
               <button className="btn" type="button" onClick={() => void openLocalExplorer()}>
                 로컬 탐색기
               </button>
-              <button
-                className={`btn${fileManagerOpen ? " primary" : ""}`}
-                type="button"
-                onClick={toggleFileManager}
-              >
-                {fileManagerOpen ? "파일 관리자 숨김" : "파일 관리자"}
-              </button>
+              <div className="toolbar-menu">
+                <button
+                  className={`btn${fileManagerOpen || showApprovalTool || toolMenuOpen ? " primary" : ""}`}
+                  type="button"
+                  aria-expanded={toolMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setToolMenuOpen((open) => !open)}
+                >
+                  Tool ▾
+                </button>
+                {toolMenuOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className="toolbar-menu-backdrop"
+                      aria-label="메뉴 닫기"
+                      onClick={() => setToolMenuOpen(false)}
+                    />
+                    <div className="toolbar-menu-dropdown" role="menu">
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setToolMenuOpen(false);
+                          toggleFileManager();
+                        }}
+                      >
+                        {fileManagerOpen ? "파일 관리자 숨김" : "파일 관리자"}
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setToolMenuOpen(false);
+                          setShowApprovalTool(true);
+                        }}
+                      >
+                        결재Tool
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 className={`btn${logCollectOpen || logCollecting ? " primary" : ""}`}
                 type="button"
@@ -764,6 +797,13 @@ function App() {
       )}
 
       {showSqlBind && <SqlBindPanel onClose={() => setShowSqlBind(false)} />}
+
+      {showApprovalTool && selected && (
+        <ApprovalToolPanel
+          server={selected}
+          onClose={() => setShowApprovalTool(false)}
+        />
+      )}
 
       {secretPrompt && (
         <SecretPromptModal
