@@ -35,3 +35,5 @@ env/*.env
 # Accidental junk
 src-tauri/2
 
+
+.superpowers/

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent as ReactChangeEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+} from "react";
 import {
   EXAMPLE_LOG,
   bindSql,
@@ -7,8 +14,10 @@ import {
   parseLogText,
   parseParameterString,
   parseTypesString,
+  splitLogStatements,
   type BoundParam,
   type DbType,
+  type LogStatementUnit,
   type SqlParamType,
 } from "../lib/sqlBinder";
 
@@ -47,8 +56,12 @@ export function SqlBindPanel({ onClose }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [hasCopied, setHasCopied] = useState(false);
   const [copyLabel, setCopyLabel] = useState("복사");
+  const [importedUnits, setImportedUnits] = useState<LogStatementUnit[]>([]);
+  const [importedFileName, setImportedFileName] = useState<string | null>(null);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const resultRef = useRef<HTMLTextAreaElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const placeholderCount = useMemo(() => countPlaceholders(sql), [sql]);
 
@@ -169,6 +182,40 @@ export function SqlBindPanel({ onClose }: Props) {
     setStatus("예제 로그가 로드되어 자동으로 파싱·바인딩되었습니다.");
   };
 
+  const selectImportedUnit = (unit: LogStatementUnit) => {
+    setSelectedUnitId(unit.id);
+    setLogText(unit.raw);
+    applyFromLog(unit.raw);
+    setStatus(`선택한 로그가 적용되었습니다: ${unit.label}`);
+  };
+
+  const onImportFileChange = (e: ReactChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setError(null);
+    setStatus(null);
+    void (async () => {
+      try {
+        const text = await file.text();
+        const units = splitLogStatements(text);
+        if (units.length === 0) {
+          setImportedUnits([]);
+          setImportedFileName(null);
+          setSelectedUnitId(null);
+          setError("Executing Statement를 찾을 수 없습니다.");
+          return;
+        }
+        setImportedUnits(units);
+        setImportedFileName(file.name);
+        selectImportedUnit(units[0]);
+      } catch {
+        setError("로그 파일을 읽지 못했습니다.");
+      }
+    })();
+  };
+
   const clearAll = () => {
     setLogText("");
     setSql("");
@@ -179,6 +226,9 @@ export function SqlBindPanel({ onClose }: Props) {
     setError(null);
     setStatus(null);
     setHasCopied(false);
+    setImportedUnits([]);
+    setImportedFileName(null);
+    setSelectedUnitId(null);
   };
 
   const updateParamValue = (index: number, value: string) => {
@@ -299,9 +349,25 @@ export function SqlBindPanel({ onClose }: Props) {
               <button type="button" className="btn" onClick={insertExampleLog}>
                 예제 로그
               </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                불러오기
+              </button>
               <button type="button" className="btn" onClick={clearAll}>
                 모두 지우기
               </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".log,text/plain"
+                className="sqlbind-file-input"
+                onChange={onImportFileChange}
+                aria-hidden="true"
+                tabIndex={-1}
+              />
             </div>
           </div>
           <textarea
@@ -316,6 +382,38 @@ export function SqlBindPanel({ onClose }: Props) {
               "예:\n... Executing Statement: SELECT ... WHERE id=?\n... Parameters: [val1, val2]\n... Types: [java.lang.String, java.lang.String]"
             }
           />
+
+          {importedUnits.length > 0 && (
+            <div className="sqlbind-import-list" role="radiogroup" aria-label="불러온 로그 목록">
+              <div className="sqlbind-import-header">
+                <span className="field-label">
+                  불러온 로그 ({importedUnits.length}건)
+                </span>
+                {importedFileName && (
+                  <span className="sqlbind-import-filename" title={importedFileName}>
+                    {importedFileName}
+                  </span>
+                )}
+              </div>
+              <ul className="sqlbind-import-items">
+                {importedUnits.map((unit) => (
+                  <li key={unit.id}>
+                    <label className="sqlbind-import-item">
+                      <input
+                        type="radio"
+                        name="sqlbind-imported-unit"
+                        checked={selectedUnitId === unit.id}
+                        onChange={() => selectImportedUnit(unit)}
+                      />
+                      <span className="sqlbind-import-label" title={unit.label}>
+                        {unit.label}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <hr className="sqlbind-divider" />
 

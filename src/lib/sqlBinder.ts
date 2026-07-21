@@ -24,6 +24,90 @@ export interface ParsedLog {
   types: string;
 }
 
+export interface LogStatementUnit {
+  id: string;
+  label: string;
+  raw: string;
+}
+
+/** SQL 주석의 메서드명 + 쿼리 앞부분으로 라디오 라벨 생성 */
+export function buildLogStatementLabel(sql: string, maxSqlLen = 60): string {
+  const commentMatch = sql.match(/\/\*\s*([^*]+?)\s*\*\//);
+  let method = "SQL";
+  if (commentMatch) {
+    const parts = commentMatch[1].trim().split(".");
+    method = parts[parts.length - 1] || commentMatch[1].trim();
+  }
+  const withoutComment = normalizeSql(sql.replace(/\/\*[\s\S]*?\*\//g, " "));
+  const preview =
+    withoutComment.length > maxSqlLen
+      ? `${withoutComment.slice(0, maxSqlLen)}…`
+      : withoutComment;
+  return preview ? `${method} — ${preview}` : method;
+}
+
+/**
+ * dao 로그를 Executing Statement 단위로 분리.
+ * 각 단위 raw는 parseLogText / 통합 입력과 호환된다.
+ */
+export function splitLogStatements(text: string): LogStatementUnit[] {
+  const lines = text.split(/\r?\n/);
+  const execStarts: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("Executing Statement:")) execStarts.push(i);
+  }
+
+  const units: LogStatementUnit[] = [];
+  for (let u = 0; u < execStarts.length; u++) {
+    const start = execStarts[u];
+    const hardEnd = u + 1 < execStarts.length ? execStarts[u + 1] : lines.length;
+    let end = start + 1;
+
+    for (let i = start + 1; i < hardEnd; i++) {
+      const line = lines[i];
+      if (
+        line.includes("Preparing Statement:") ||
+        line.includes("} Connection") ||
+        /\{\s*conn-\d+\s*\}\s*Connection\b/.test(line) ||
+        line.includes("ResultSet")
+      ) {
+        break;
+      }
+
+      if (line.includes("Parameters:") || line.includes("Types:")) {
+        const key = line.includes("Parameters:") ? "Parameters:" : "Types:";
+        const idx = line.indexOf(key);
+        const rest = [line.substring(idx + key.length), ...lines.slice(i + 1, hardEnd)].join(
+          "\n",
+        );
+        const arr = extractArrayContent(rest);
+        if (!arr) {
+          end = i + 1;
+          continue;
+        }
+        // 배열이 차지하는 줄 수만큼 end 확장
+        const prefix = line.substring(0, idx + key.length);
+        const consumed = `${prefix}${arr}`;
+        const consumedLines = consumed.split(/\r?\n/).length;
+        end = Math.max(end, i + consumedLines);
+        i = end - 1;
+        continue;
+      }
+    }
+
+    const raw = lines.slice(start, end).join("\n").trim();
+    if (!raw) continue;
+    const { sql } = parseLogText(raw);
+    units.push({
+      id: `stmt-${u}`,
+      label: buildLogStatementLabel(sql || raw),
+      raw,
+    });
+  }
+
+  return units;
+}
+
 export interface BoundParam {
   value: string;
   type: SqlParamType;

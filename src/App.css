@@ -1485,6 +1485,78 @@ button {
   min-height: 120px;
 }
 
+.sqlbind-file-input {
+  display: none;
+}
+
+.sqlbind-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.sqlbind-import-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sqlbind-import-header .field-label {
+  margin: 0;
+}
+
+.sqlbind-import-filename {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+
+.sqlbind-import-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sqlbind-import-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sqlbind-import-item:hover {
+  background: var(--bg-elevated);
+}
+
+.sqlbind-import-item input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.sqlbind-import-label {
+  min-width: 0;
+  word-break: break-word;
+  line-height: 1.35;
+  color: var(--text);
+}
+
 .sqlbind-sql {
   min-height: 140px;
 }
