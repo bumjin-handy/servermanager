@@ -30,7 +30,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 - 새 터미널
 - 로컬 탐색기 (OS 탐색기로 홈 열기)
-- 파일 관리자 (숨김/펼침)
+- **Tool ▾**: 파일 관리자 / 결재Tool / 결재INI설명
 - 로그수집 (수집 중 ● 표시)
 - SQL Bind
 - 즐겨찾기
@@ -191,7 +191,19 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 ---
 
-## 9. 데이터 모델 요약
+## 9. 결재 INI 설명
+
+Tool ▾ → **결재INI설명**. 전자결재 INI/설정 옵션 레퍼런스 뷰어 (클라이언트 전용).
+
+- **불러오기**로 로컬 Excel(`.xlsx`) 선택 → 경로만 `store.json` (`approvalIniDocsPath`)에 저장, 다음 실행 시 재로드
+- Excel 파일·변환 JSON은 **git에 포함하지 않음** (`reference/**/*.xlsx` gitignore)
+- 파싱: `src/lib/approvalIniDocs.ts` (SheetJS)
+- 검색: 현재 시트 기본, ☐ 전체 시트 토글 시 전 시트 검색·행 클릭으로 이동
+- 시트 예: globals.properties, jhomscfg.xml, handydef.ini, 기타설정및가이드, 권한별역할, 서식Guide, 결재알림, ErrorCode설명
+
+---
+
+## 10. 데이터 모델 요약
 
 | 항목 | 설명 |
 |------|------|
@@ -204,7 +216,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 ---
 
-## 10. 주요 UX 규칙
+## 11. 주요 UX 규칙
 
 - 파일 관리자 ↔ 터미널: SSH 세션 **유지**
 - 서버 목록 전환: 다른 서버의 터미널·SFTP **유지**
@@ -215,7 +227,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 ---
 
-## 11. 알려진 제한·개선 여지
+## 12. 알려진 제한·개선 여지
 
 - 한글 서버명 → `.env` 파일명 슬러그가 약할 수 있음 (예: `server.env`)
 - 일부 서버는 password 외 **keyboard-interactive** 인증이 필요할 수 있음
@@ -226,7 +238,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 ---
 
-## 12. 주요 소스 경로
+## 13. 주요 소스 경로
 
 | 영역 | 경로 |
 |------|------|
@@ -235,6 +247,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 | 파일 관리자 | `src/components/FilesPane.tsx`, `SiteExplorer.tsx`, `DirTree.tsx`, `FileTable.tsx` |
 | 로그 수집 | `src/components/LogCollectPanel.tsx` |
 | SQL Bind | `src/components/SqlBindPanel.tsx`, `src/lib/sqlBinder.ts` |
+| 결재 INI 설명 | `src/components/ApprovalIniDocsPanel.tsx`, `src/lib/approvalIniDocs.ts` |
 | 텍스트 뷰어 | `src/components/TextViewerModal.tsx` |
 | API 바인딩 | `src/api.ts`, `src/types.ts` |
 | Rust | `src-tauri/src/lib.rs`, `ssh.rs`, `sftp.rs`, `local_fs.rs`, `store.rs`, `env_secrets.rs`, `infisical.rs` |

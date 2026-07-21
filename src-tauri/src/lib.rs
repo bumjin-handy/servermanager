@@ -560,6 +560,27 @@ fn open_local_with_editor(path: String, editor: String) -> Result<(), String> {
     local_fs::open_with_editor(std::path::Path::new(&path), &editor).map_err(err_string)
 }
 
+#[tauri::command]
+fn get_approval_ini_docs_path(state: State<'_, AppState>) -> Result<String, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    Ok(store.get_approval_ini_docs_path())
+}
+
+#[tauri::command]
+fn set_approval_ini_docs_path(state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    store
+        .set_approval_ini_docs_path(path)
+        .map_err(err_string)
+}
+
+#[tauri::command]
+fn read_local_file_base64(path: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = std::fs::read(&path).map_err(|e| format!("파일 읽기 실패: {path}: {e}"))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -679,6 +700,9 @@ pub fn run() {
             local_list,
             local_parent,
             open_local_with_editor,
+            get_approval_ini_docs_path,
+            set_approval_ini_docs_path,
+            read_local_file_base64,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

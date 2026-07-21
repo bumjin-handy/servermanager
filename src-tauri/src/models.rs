@@ -88,6 +88,9 @@ pub struct AppData {
     /// Optional directory for suggesting per-server `.env` paths. Empty = app data `/env`.
     #[serde(default)]
     pub default_env_dir: String,
+    /// Remembered local path to HANDY HSO Approval INI xlsx (not committed; user-selected).
+    #[serde(default)]
+    pub approval_ini_docs_path: String,
     #[serde(default)]
     pub infisical: InfisicalConfig,
 }

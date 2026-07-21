@@ -15,6 +15,7 @@ import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { SqlBindPanel } from "./components/SqlBindPanel";
 import { ApprovalToolPanel } from "./components/ApprovalToolPanel";
+import { ApprovalIniDocsPanel } from "./components/ApprovalIniDocsPanel";
 import { TerminalPane, sendCtrlC, writeToSession } from "./components/TerminalPane";
 import { joinLocal, toNativeLocalPath } from "./components/fileManagerShared";
 import type { AppSettingsView, Server, WorkspacePane } from "./types";
@@ -79,6 +80,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showSqlBind, setShowSqlBind] = useState(false);
   const [showApprovalTool, setShowApprovalTool] = useState(false);
+  const [showApprovalIniDocs, setShowApprovalIniDocs] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettingsView | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
@@ -704,7 +706,7 @@ function App() {
               </button>
               <div className="toolbar-menu">
                 <button
-                  className={`btn${fileManagerOpen || showApprovalTool || toolMenuOpen ? " primary" : ""}`}
+                  className={`btn${fileManagerOpen || showApprovalTool || showApprovalIniDocs || toolMenuOpen ? " primary" : ""}`}
                   type="button"
                   aria-expanded={toolMenuOpen}
                   aria-haspopup="menu"
@@ -742,6 +744,17 @@ function App() {
                         }}
                       >
                         결재Tool
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setToolMenuOpen(false);
+                          setShowApprovalIniDocs(true);
+                        }}
+                      >
+                        결재INI설명
                       </button>
                     </div>
                   </>
@@ -811,6 +824,9 @@ function App() {
           server={selected}
           onClose={() => setShowApprovalTool(false)}
         />
+      )}
+      {showApprovalIniDocs && (
+        <ApprovalIniDocsPanel onClose={() => setShowApprovalIniDocs(false)} />
       )}
 
       {secretPrompt && (

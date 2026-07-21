@@ -103,6 +103,16 @@ impl Store {
         Ok(())
     }
 
+    pub fn get_approval_ini_docs_path(&self) -> String {
+        self.data.approval_ini_docs_path.clone()
+    }
+
+    pub fn set_approval_ini_docs_path(&mut self, path: String) -> Result<()> {
+        self.data.approval_ini_docs_path = path;
+        self.persist()?;
+        Ok(())
+    }
+
     /// Directory used when suggesting per-server env files.
     pub fn resolve_default_env_dir(&self) -> PathBuf {
         let configured = self.data.default_env_dir.trim();

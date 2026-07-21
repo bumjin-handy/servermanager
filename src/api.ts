@@ -61,6 +61,10 @@ export const api = {
     environment: string;
     clientSecret?: string;
   }) => invoke<void>("save_app_settings", { input }),
+  getApprovalIniDocsPath: () => invoke<string>("get_approval_ini_docs_path"),
+  setApprovalIniDocsPath: (path: string) =>
+    invoke<void>("set_approval_ini_docs_path", { path }),
+  readLocalFileBase64: (path: string) => invoke<string>("read_local_file_base64", { path }),
   suggestEnvPath: (serverName: string, host?: string) =>
     invoke<string>("suggest_env_path", { serverName, host: host ?? null }),
   testEnvFile: (path: string) => invoke<string>("test_env_file", { path }),

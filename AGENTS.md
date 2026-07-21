@@ -15,4 +15,5 @@ Tauri 2 + React SSH Server Manager. Credentials default to **session memory** (p
 
 - Switching servers keeps per-server workspaces mounted; do not tear down SSH/SFTP on selection change.
 - SQL Bind is client-side only (`src/lib/sqlBinder.ts` + `SqlBindPanel`); no Rust/network.
+- Approval INI docs: user-selected local xlsx path in `store.json` only; do not commit the Excel/JSON (`ApprovalIniDocsPanel` + `approvalIniDocs.ts`).
 - Log download “open in editor” uses `open_local_with_editor` (Cursor / VS Code / EditPlus).

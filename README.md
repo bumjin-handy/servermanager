@@ -39,5 +39,6 @@ Infisical 설정 → [docs/infisical.md](docs/infisical.md)
 | 파일 관리자 | 우측 전체 오버레이, 로컬(전체 드라이브) ↔ 원격(SFTP), DnD·경로 즐겨찾기, 원격 텍스트 보기 |
 | 로그 수집 | 다중 `tail -F` 병렬(+`tee`), 선택적 `grep -E` 필터·터미널 색 강조, `$HOME/logs/년월일시분초/`, 종료 후 확인·폴더 선택 다운로드, 경로 복사·에디터로 열기(Cursor/VS Code/EditPlus) |
 | SQL Bind | MyBatis 로그/`?` 파라미터를 DB별 리터럴 SQL로 바인딩 (클라이언트 전용, 사이드바·툴바) |
+| 결재INI설명 | Tool 메뉴 — 로컬 Approval INI Excel 불러오기(경로만 기억)·시트 열람·검색 |
 
 자세한 동작·경로 규칙·제한 사항은 [docs/SPEC.md](docs/SPEC.md)를 참고하세요.

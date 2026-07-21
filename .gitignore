@@ -37,3 +37,12 @@ src-tauri/2
 
 
 .superpowers/
+
+# Local approval INI Excel — path only in store.json; do not commit
+**/*Approval_ini*.xlsx
+**/*Approval_ini*.xls
+reference/**/*.xlsx
+reference/**/*.xls
+docs/reference/**/*.xlsx
+docs/reference/**/*.xls
+src/data/approvalIniDocs.json
