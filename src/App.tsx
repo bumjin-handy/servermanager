@@ -8,6 +8,7 @@ import { FilesPane } from "./components/FilesPane";
 import {
   LogCollectPanel,
   buildLogCollectPlan,
+  type LogCollectFilter,
   type LogCollectOutput,
 } from "./components/LogCollectPanel";
 import { ServerModal } from "./components/ServerModal";
@@ -269,7 +270,7 @@ function App() {
     }));
   };
 
-  const startLogCollect = async (paths: string[]) => {
+  const startLogCollect = async (paths: string[], filter: LogCollectFilter) => {
     if (!selected) return;
     if (paths.length === 0) {
       patchSelected((current) => ({
@@ -283,7 +284,11 @@ function App() {
     await saveLogPaths(paths);
 
     const stamp = new Date();
-    const { plan, collectDir, stamp: stampStr } = buildLogCollectPlan(paths, stamp);
+    const { plan, collectDir, stamp: stampStr } = buildLogCollectPlan(
+      paths,
+      stamp,
+      filter,
+    );
     const sessionIds = ensureParallelLogTerminals(plan.map((p) => p.paneTitle));
 
     // Wait for all SSH sessions to connect, then start all tails in parallel
@@ -298,12 +303,15 @@ function App() {
       fileName: p.fileName,
       stamp: stampStr,
     }));
+    const filterNote = filter.pattern.trim()
+      ? ` · 필터: ${filter.pattern.trim()}${filter.color ? " (색)" : ""}`
+      : "";
     patchSelected((current) => ({
       ...current,
       logOutputs: outputs,
       logCollectDir: collectDir,
       logCollecting: true,
-      logCollectStatus: `${outputs.length}개 로그 병렬 수집 시작 · 저장: ${collectDir}`,
+      logCollectStatus: `${outputs.length}개 로그 병렬 수집 시작 · 저장: ${collectDir}${filterNote}`,
       logCollectError: false,
     }));
   };

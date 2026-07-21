@@ -22,7 +22,7 @@ interface Props {
   error?: boolean;
   onClose: () => void;
   onSavePaths: (paths: string[]) => Promise<void>;
-  onStart: (paths: string[]) => Promise<void>;
+  onStart: (paths: string[], filter: LogCollectFilter) => Promise<void>;
   /** Stops collection and returns generated output files (for download prompt). */
   onStop: () => Promise<LogCollectOutput[]>;
   onDownload: (outputs: LogCollectOutput[], localDir: string) => Promise<void>;
@@ -51,6 +51,8 @@ export function LogCollectPanel({
   onClearPendingDownload,
 }: Props) {
   const [text, setText] = useState(server.logCollectPaths?.join("\n") ?? "");
+  const [filterPattern, setFilterPattern] = useState("");
+  const [filterColor, setFilterColor] = useState(true);
   const [busy, setBusy] = useState(false);
   const [downloadAsk, setDownloadAsk] = useState<LogCollectOutput[] | null>(null);
   const [wantDownload, setWantDownload] = useState(true);
@@ -281,9 +283,11 @@ export function LogCollectPanel({
         <div className="modal-body log-collect-body">
           <p className="log-collect-help">
             수집할 로그 경로를 한 줄에 하나씩 입력하세요. 수집 시작 시 로그마다 전용 터미널에서
-            <code> tail -f </code>가 <strong>동시에</strong> 실행되며, 결과는
-            <code> $HOME/logs/년월일시분초/&lt;파일명&gt;년월일시분초.log </code>에 저장됩니다. 수집 끝은
-            각 세션에 Ctrl+C를 보냅니다. 완료 후 로컬 다운로드 여부를 확인할 수 있습니다.
+            <code> tail -F </code>가 <strong>동시에</strong> 실행되며, 결과는
+            <code> $HOME/logs/년월일시분초/&lt;파일명&gt;년월일시분초.log </code>에 저장됩니다.
+            선택적으로 필터(<code>grep -E</code>)를 걸면 매칭 줄만 터미널·저장 파일에 남고, 색 강조는
+            터미널에만 적용됩니다. 수집 끝은 각 세션에 Ctrl+C를 보냅니다. 완료 후 로컬 다운로드
+            여부를 확인할 수 있습니다.
           </p>
 
           <label className="field-label" htmlFor="log-paths">
@@ -299,6 +303,41 @@ export function LogCollectPanel({
             onChange={(e) => setText(e.target.value)}
           />
 
+          <label className="field-label" htmlFor="log-filter">
+            필터 (선택)
+          </label>
+          <div className="log-filter-row">
+            <input
+              id="log-filter"
+              className="log-filter-input"
+              type="text"
+              value={filterPattern}
+              placeholder={'예: ERROR|WARN|Exception'}
+              disabled={collecting || busy || !!downloadAsk}
+              onChange={(e) => setFilterPattern(e.target.value)}
+              spellCheck={false}
+            />
+            <label
+              className={`log-filter-color${filterPattern.trim() ? "" : " is-disabled"}`}
+              title={
+                filterPattern.trim()
+                  ? "터미널에만 ANSI 색 적용 (저장 파일은 무색)"
+                  : "필터를 입력하면 사용할 수 있습니다"
+              }
+            >
+              <input
+                type="checkbox"
+                checked={filterColor}
+                disabled={!filterPattern.trim() || collecting || busy || !!downloadAsk}
+                onChange={(e) => setFilterColor(e.target.checked)}
+              />
+              색 강조
+            </label>
+          </div>
+          <p className="log-filter-hint">
+            비우면 전체 줄을 저장합니다. 채우면 <code>grep -E</code> 패턴으로 필터합니다.
+          </p>
+
           <div className="log-collect-actions">
             <button
               type="button"
@@ -313,7 +352,14 @@ export function LogCollectPanel({
                 type="button"
                 className="btn primary"
                 disabled={busy || paths.length === 0 || !!downloadAsk}
-                onClick={() => void run(() => onStart(paths))}
+                onClick={() =>
+                  void run(() =>
+                    onStart(paths, {
+                      pattern: filterPattern.trim(),
+                      color: filterColor,
+                    }),
+                  )
+                }
               >
                 수집 시작
               </button>
@@ -574,6 +620,11 @@ export function shellQuote(s: string) {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
+/** Double-quote for paths that must expand shell vars (e.g. `$HOME/...`). */
+export function shellDoubleQuote(s: string) {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
 export type LogCollectPlan = {
   source: string;
   /** Display / remote path e.g. `$HOME/logs/20260717145322/bms.log` */
@@ -585,10 +636,42 @@ export type LogCollectPlan = {
   paneTitle: string;
 };
 
+export type LogCollectFilter = {
+  /** Extended regex for grep -E; empty = no filter */
+  pattern: string;
+  /** ANSI color in the terminal only (saved file stays plain) */
+  color: boolean;
+};
+
+/** Build remote shell command for one log path. */
+export function buildLogCollectCommand(
+  source: string,
+  outputFile: string,
+  collectDir: string,
+  filter: LogCollectFilter = { pattern: "", color: true },
+): string {
+  const src = shellQuote(source);
+  const out = shellDoubleQuote(outputFile);
+  const dir = shellDoubleQuote(collectDir);
+  const pat = filter.pattern.trim();
+  const mkdir = `mkdir -p ${dir}`;
+
+  if (!pat) {
+    return `${mkdir} && tail -F ${src} | tee ${out}`;
+  }
+
+  const grepped = `tail -F ${src} | grep --line-buffered -E ${shellQuote(pat)} | tee ${out}`;
+  if (filter.color) {
+    return `${mkdir} && ${grepped} | grep --color=always -E ${shellQuote(pat)}`;
+  }
+  return `${mkdir} && ${grepped}`;
+}
+
 /** Build parallel collect plan. Output → `$HOME/logs/<년월일시분초>/<name>.log` */
 export function buildLogCollectPlan(
   paths: string[],
   date = new Date(),
+  filter: LogCollectFilter = { pattern: "", color: true },
 ): { plan: LogCollectPlan[]; collectDir: string; stamp: string } {
   const stamp = formatLogStamp(date);
   const collectDir = `$HOME/logs/${stamp}`;
@@ -602,7 +685,7 @@ export function buildLogCollectPlan(
       fileName,
       stamp,
       collectDir,
-      command: `mkdir -p "${collectDir}" && tail -f ${shellQuote(source)} > "${outputFile}"`,
+      command: buildLogCollectCommand(source, outputFile, collectDir, filter),
       paneTitle: `로그:${stem}`,
     };
   });
