@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.servermanager.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "node ./node_modules/vite/bin/vite.js",
     "devUrl": "http://127.0.0.1:14200",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
