@@ -1125,6 +1125,18 @@ button {
   font-size: 11px;
 }
 
+.log-memo-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
 .log-collect-actions {
   display: flex;
   align-items: center;

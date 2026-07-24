@@ -19,6 +19,15 @@ pub fn ensure_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path).with_context(|| format!("디렉터리 생성 실패: {}", path.display()))
 }
 
+pub fn write_text(path: &Path, content: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            ensure_dir(parent)?;
+        }
+    }
+    fs::write(path, content).with_context(|| format!("파일 쓰기 실패: {}", path.display()))
+}
+
 pub fn list_drives() -> Result<Vec<RemoteFileEntry>> {
     #[cfg(windows)]
     {

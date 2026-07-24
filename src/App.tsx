@@ -33,6 +33,7 @@ interface ServerWorkspace {
   logCollectError: boolean;
   logCollectSessionIds: string[];
   logCollectDir: string | null;
+  logCollectMemo: string;
   pendingDownload: LogCollectOutput[] | null;
 }
 
@@ -63,6 +64,7 @@ function createEmptyWorkspace(): ServerWorkspace {
     logCollectError: false,
     logCollectSessionIds: [],
     logCollectDir: null,
+    logCollectMemo: "",
     pendingDownload: null,
   };
 }
@@ -84,11 +86,6 @@ function App() {
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettingsView | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    server: Server;
-  } | null>(null);
 
   const [secretPrompt, setSecretPrompt] = useState<{
     label: string;
@@ -152,24 +149,9 @@ function App() {
     return list;
   }, []);
 
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("click", close);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [contextMenu]);
-
   const openEditServer = (server: Server) => {
     setEditingServer(server);
     setShowServerModal(true);
-    setContextMenu(null);
   };
 
   useEffect(() => {
@@ -206,8 +188,8 @@ function App() {
     setSelectedId(server.id);
   };
 
-  const addTerminal = () => {
-    patchSelected((current) => {
+  const addTerminalFor = (serverId: string) => {
+    patchWorkspace(serverId, (current) => {
       const count = current.panes.filter((p) => p.kind === "terminal").length + 1;
       const pane = createTerminalPane(count);
       return {
@@ -217,6 +199,17 @@ function App() {
         activePaneId: pane.id,
       };
     });
+  };
+
+  const addTerminal = () => {
+    if (!selectedId) return;
+    addTerminalFor(selectedId);
+  };
+
+  /** Select server and open a new terminal pane (sidebar double-click). */
+  const openNewTerminalFor = (server: Server) => {
+    setSelectedId(server.id);
+    addTerminalFor(server.id);
   };
 
   const toggleFileManager = () => {
@@ -272,7 +265,11 @@ function App() {
     }));
   };
 
-  const startLogCollect = async (paths: string[], filter: LogCollectFilter) => {
+  const startLogCollect = async (
+    paths: string[],
+    filter: LogCollectFilter,
+    memo: string,
+  ) => {
     if (!selected) return;
     if (paths.length === 0) {
       patchSelected((current) => ({
@@ -308,12 +305,14 @@ function App() {
     const filterNote = filter.pattern.trim()
       ? ` · 필터: ${filter.pattern.trim()}${filter.color ? " (색)" : ""}`
       : "";
+    const memoNote = memo.trim() ? ` · 메모: ${memo.trim()}` : "";
     patchSelected((current) => ({
       ...current,
       logOutputs: outputs,
       logCollectDir: collectDir,
+      logCollectMemo: memo.trim(),
       logCollecting: true,
-      logCollectStatus: `${outputs.length}개 로그 병렬 수집 시작 · 저장: ${collectDir}${filterNote}`,
+      logCollectStatus: `${outputs.length}개 로그 병렬 수집 시작 · 저장: ${collectDir}${filterNote}${memoNote}`,
       logCollectError: false,
     }));
   };
@@ -337,6 +336,7 @@ function App() {
   ) => {
     if (!selected || outputs.length === 0 || !localDir.trim()) return;
     const stamp = outputs[0]!.stamp;
+    const memo = (selectedId ? workspaces[selectedId]?.logCollectMemo : "") ?? "";
     patchSelected((current) => ({
       ...current,
       logCollectStatus: "로그 파일 다운로드 중…",
@@ -352,6 +352,12 @@ function App() {
         const remotePath = `${remoteHome.replace(/\/$/, "")}/logs/${stamp}/${o.fileName}`;
         const localPath = joinLocal(dir, o.fileName);
         await api.sftpDownload(selected.id, remotePath, localPath);
+      }
+
+      if (memo.trim()) {
+        const memoPath = joinLocal(dir, "memo.txt");
+        const body = `${memo.trim()}\n`;
+        await api.localWriteText(memoPath, body);
       }
 
       patchSelected((current) => ({
@@ -655,10 +661,10 @@ function App() {
               type="button"
               className={`server-item${selectedId === server.id ? " active" : ""}`}
               onClick={() => openWorkspaceFor(server)}
-              onDoubleClick={() => openEditServer(server)}
+              onDoubleClick={() => openNewTerminalFor(server)}
               onContextMenu={(e) => {
                 e.preventDefault();
-                setContextMenu({ x: e.clientX, y: e.clientY, server });
+                openEditServer(server);
               }}
             >
               <span className="name">{server.name}</span>
@@ -865,21 +871,6 @@ function App() {
         />
       )}
 
-      {contextMenu && (
-        <div
-          className="context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={() => openEditServer(contextMenu.server)}
-          >
-            서버 편집
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -2,8 +2,14 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { RemoteTextContent, Server } from "../types";
 import { api, runWithSessionSecret } from "../api";
-import { toNativeLocalPath } from "./fileManagerShared";
+import { joinLocal, toNativeLocalPath } from "./fileManagerShared";
 import { TextViewerModal } from "./TextViewerModal";
+
+/** Folder segment for local log downloads (`…/logs/<name>/<stamp>/`). */
+function localLogServerFolder(serverName: string) {
+  const cleaned = serverName.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
+  return cleaned || "server";
+}
 
 export type LogCollectOutput = {
   source: string;
@@ -22,7 +28,7 @@ interface Props {
   error?: boolean;
   onClose: () => void;
   onSavePaths: (paths: string[]) => Promise<void>;
-  onStart: (paths: string[], filter: LogCollectFilter) => Promise<void>;
+  onStart: (paths: string[], filter: LogCollectFilter, memo: string) => Promise<void>;
   /** Stops collection and returns generated output files (for download prompt). */
   onStop: () => Promise<LogCollectOutput[]>;
   onDownload: (outputs: LogCollectOutput[], localDir: string) => Promise<void>;
@@ -53,6 +59,7 @@ export function LogCollectPanel({
   const [text, setText] = useState(server.logCollectPaths?.join("\n") ?? "");
   const [filterPattern, setFilterPattern] = useState("");
   const [filterColor, setFilterColor] = useState(true);
+  const [memo, setMemo] = useState("");
   const [busy, setBusy] = useState(false);
   const [downloadAsk, setDownloadAsk] = useState<LogCollectOutput[] | null>(null);
   const [wantDownload, setWantDownload] = useState(true);
@@ -159,6 +166,7 @@ export function LogCollectPanel({
 
   useEffect(() => {
     setText(server.logCollectPaths?.join("\n") ?? "");
+    setMemo("");
   }, [server.id, server.logCollectPaths]);
 
   useEffect(() => {
@@ -176,8 +184,10 @@ export function LogCollectPanel({
       try {
         const home = await api.localHome();
         if (!cancelled && !localSaveDir) {
+          const stamp = downloadAsk[0]?.stamp ?? "";
+          const logsRoot = `${home.replace(/[/\\]+$/, "")}/logs`;
           setLocalSaveDir(
-            toNativeLocalPath(`${home.replace(/[/\\]+$/, "")}/logs/${downloadAsk[0]?.stamp ?? ""}`),
+            joinLocal(joinLocal(logsRoot, localLogServerFolder(server.name)), stamp),
           );
         }
       } catch {
@@ -338,6 +348,23 @@ export function LogCollectPanel({
             비우면 전체 줄을 저장합니다. 채우면 <code>grep -E</code> 패턴으로 필터합니다.
           </p>
 
+          <label className="field-label" htmlFor="log-memo">
+            수집 메모 (선택)
+          </label>
+          <input
+            id="log-memo"
+            className="log-memo-input"
+            type="text"
+            value={memo}
+            placeholder="예: 결재 오류 재현 / 배포 후 확인"
+            disabled={collecting || busy || !!downloadAsk}
+            onChange={(e) => setMemo(e.target.value)}
+            maxLength={200}
+          />
+          <p className="log-filter-hint">
+            로컬 다운로드 폴더에 <code>memo.txt</code>로 함께 저장됩니다.
+          </p>
+
           <div className="log-collect-actions">
             <button
               type="button"
@@ -354,10 +381,14 @@ export function LogCollectPanel({
                 disabled={busy || paths.length === 0 || !!downloadAsk}
                 onClick={() =>
                   void run(() =>
-                    onStart(paths, {
-                      pattern: filterPattern.trim(),
-                      color: filterColor,
-                    }),
+                    onStart(
+                      paths,
+                      {
+                        pattern: filterPattern.trim(),
+                        color: filterColor,
+                      },
+                      memo.trim(),
+                    ),
                   )
                 }
               >

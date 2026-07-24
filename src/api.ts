@@ -93,6 +93,8 @@ export const api = {
     invoke<string>("parent_remote_path", { path }),
   localHome: () => invoke<string>("local_home"),
   localMkdir: (path: string) => invoke<void>("local_mkdir", { path }),
+  localWriteText: (path: string, content: string) =>
+    invoke<void>("local_write_text", { path, content }),
   localDrives: () => invoke<RemoteFileEntry[]>("local_drives"),
   localList: (path: string) =>
     invoke<RemoteFileEntry[]>("local_list", { path }),

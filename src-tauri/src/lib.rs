@@ -541,6 +541,11 @@ fn local_mkdir(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn local_write_text(path: String, content: String) -> Result<(), String> {
+    local_fs::write_text(std::path::Path::new(&path), &content).map_err(err_string)
+}
+
+#[tauri::command]
 fn local_drives() -> Result<Vec<RemoteFileEntry>, String> {
     local_fs::list_drives().map_err(err_string)
 }
@@ -696,6 +701,7 @@ pub fn run() {
             parent_remote_path,
             local_home,
             local_mkdir,
+            local_write_text,
             local_drives,
             local_list,
             local_parent,
