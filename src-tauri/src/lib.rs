@@ -1,10 +1,5 @@
-#[allow(dead_code)]
-mod env_secrets;
-mod infisical;
 mod local_fs;
 mod models;
-#[allow(dead_code)]
-mod secret_crypto;
 mod sftp;
 mod ssh;
 mod store;
@@ -15,16 +10,13 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
-use env_secrets::env_file_exists;
-use infisical::InfisicalClient;
 use models::{
-    AuthType, CredentialSource, Favorite, FavoriteType, InfisicalConfig, RemoteFileEntry,
+    AuthType, Favorite, FavoriteType, RemoteFileEntry,
     RemoteTextContent, Server,
 };
-use secret_crypto::delete_server_secret;
 use sftp::SftpManager;
 use ssh::SshManager;
-use store::{client_secret_configured, save_client_secret, Store};
+use store::Store;
 
 /// Returned when password/key is not yet in process memory for this server.
 pub const SECRET_REQUIRED: &str = "SECRET_REQUIRED";
@@ -33,7 +25,6 @@ struct AppState {
     store: Mutex<Store>,
     ssh: SshManager,
     sftp: SftpManager,
-    infisical: InfisicalClient,
     /// Per-server secrets kept only in RAM for this app process.
     session_secrets: Mutex<HashMap<String, String>>,
 }
@@ -64,19 +55,9 @@ struct UpsertServerInput {
     username: String,
     auth_type: AuthType,
     #[serde(default)]
-    credential_source: CredentialSource,
-    #[serde(default)]
     env_file_path: String,
     #[serde(default)]
     env_key: String,
-    #[serde(default)]
-    infisical_project_id: String,
-    #[serde(default)]
-    infisical_env: String,
-    #[serde(default)]
-    infisical_secret_path: String,
-    #[serde(default)]
-    infisical_secret_name: String,
 }
 
 #[derive(serde::Serialize)]
@@ -117,14 +98,9 @@ fn upsert_server(
         port: input.port,
         username: input.username,
         auth_type: input.auth_type,
-        credential_source: input.credential_source,
         // Default credentials are prompted on first connection and kept only in memory.
         env_file_path: input.env_file_path.trim().to_string(),
         env_key,
-        infisical_project_id: input.infisical_project_id,
-        infisical_env: input.infisical_env,
-        infisical_secret_path: input.infisical_secret_path,
-        infisical_secret_name: input.infisical_secret_name,
         log_collect_paths,
     };
     let server = store.upsert_server(server).map_err(err_string)?;
@@ -151,7 +127,6 @@ fn save_log_collect_paths(
 
 #[tauri::command]
 fn delete_server(state: State<'_, AppState>, id: String) -> Result<(), String> {
-    let _ = delete_server_secret(&id);
     if let Ok(mut map) = state.session_secrets.lock() {
         map.remove(&id);
     }
@@ -236,26 +211,15 @@ fn delete_favorite(state: State<'_, AppState>, id: String) -> Result<(), String>
 struct AppSettingsView {
     default_env_dir: String,
     resolved_default_env_dir: String,
-    site_url: String,
-    client_id: String,
-    project_id: String,
-    environment: String,
-    client_secret_configured: bool,
 }
 
 #[tauri::command]
 fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsView, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
-    let cfg = store.get_infisical_config();
     let resolved = store.resolve_default_env_dir();
     Ok(AppSettingsView {
         default_env_dir: store.get_default_env_dir(),
         resolved_default_env_dir: resolved.display().to_string(),
-        site_url: cfg.site_url,
-        client_id: cfg.client_id,
-        project_id: cfg.project_id,
-        environment: cfg.environment,
-        client_secret_configured: client_secret_configured(),
     })
 }
 
@@ -269,11 +233,6 @@ fn get_infisical_config(state: State<'_, AppState>) -> Result<AppSettingsView, S
 #[serde(rename_all = "camelCase")]
 struct SaveAppSettingsInput {
     default_env_dir: String,
-    site_url: String,
-    client_id: String,
-    project_id: String,
-    environment: String,
-    client_secret: Option<String>,
 }
 
 #[tauri::command]
@@ -281,32 +240,11 @@ fn save_app_settings(
     state: State<'_, AppState>,
     input: SaveAppSettingsInput,
 ) -> Result<(), String> {
-    {
-        let mut store = state.store.lock().map_err(|e| e.to_string())?;
-        store
-            .set_default_env_dir(input.default_env_dir)
-            .map_err(err_string)?;
-        store
-            .set_infisical_config(InfisicalConfig {
-                site_url: input.site_url,
-                client_id: input.client_id,
-                project_id: input.project_id,
-                environment: input.environment,
-            })
-            .map_err(err_string)?;
-    }
-    if let Some(secret) = input.client_secret {
-        save_client_secret(&secret).map_err(err_string)?;
-    }
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    store
+        .set_default_env_dir(input.default_env_dir)
+        .map_err(err_string)?;
     Ok(())
-}
-
-#[tauri::command]
-fn save_infisical_config(
-    state: State<'_, AppState>,
-    input: SaveAppSettingsInput,
-) -> Result<(), String> {
-    save_app_settings(state, input)
 }
 
 #[tauri::command]
@@ -328,52 +266,17 @@ fn test_env_file(path: String) -> Result<String, String> {
     if path.as_os_str().is_empty() {
         return Err(".env 경로가 비어 있습니다".into());
     }
-    if !env_file_exists(&path) {
+    if !path.is_file() {
         return Err(format!(".env 파일이 없습니다: {}", path.display()));
     }
     Ok(format!(".env 확인됨: {}", path.display()))
 }
 
-#[tauri::command]
-async fn test_infisical_connection(state: State<'_, AppState>) -> Result<(), String> {
-    let config = {
-        let store = state.store.lock().map_err(|e| e.to_string())?;
-        store.get_infisical_config()
-    };
-    state
-        .infisical
-        .test_connection(&config)
-        .await
-        .map_err(err_string)
-}
-
 async fn fetch_server_secret(state: &AppState, server: &Server) -> Result<String, String> {
-    match server.credential_source {
-        // Default: ask once per process, keep in memory only (no .env).
-        CredentialSource::Env => {
-            let map = state.session_secrets.lock().map_err(|e| e.to_string())?;
-            match map.get(&server.id) {
-                Some(secret) if !secret.is_empty() => Ok(secret.clone()),
-                _ => Err(SECRET_REQUIRED.into()),
-            }
-        }
-        CredentialSource::Infisical => {
-            let config = {
-                let store = state.store.lock().map_err(|e| e.to_string())?;
-                store.get_infisical_config()
-            };
-            state
-                .infisical
-                .get_secret(
-                    &config,
-                    &server.infisical_project_id,
-                    &server.infisical_env,
-                    &server.infisical_secret_path,
-                    &server.infisical_secret_name,
-                )
-                .await
-                .map_err(err_string)
-        }
+    let map = state.session_secrets.lock().map_err(|e| e.to_string())?;
+    match map.get(&server.id) {
+        Some(secret) if !secret.is_empty() => Ok(secret.clone()),
+        _ => Err(SECRET_REQUIRED.into()),
     }
 }
 
@@ -598,13 +501,8 @@ mod tests {
             port: 22,
             username: "tester".to_string(),
             auth_type: AuthType::Password,
-            credential_source: CredentialSource::Env,
             env_file_path: String::new(),
             env_key: String::new(),
-            infisical_project_id: String::new(),
-            infisical_env: String::new(),
-            infisical_secret_path: String::new(),
-            infisical_secret_name: String::new(),
             log_collect_paths: Vec::new(),
         }
     }
@@ -615,7 +513,6 @@ mod tests {
             store: Mutex::new(Store::load(dir).expect("store")),
             ssh: SshManager::new(),
             sftp: SftpManager::new(),
-            infisical: InfisicalClient::new(),
             session_secrets: Mutex::new(HashMap::new()),
         }
     }
@@ -664,7 +561,6 @@ pub fn run() {
                 store: Mutex::new(store),
                 ssh: SshManager::new(),
                 sftp: SftpManager::new(),
-                infisical: InfisicalClient::new(),
                 session_secrets: Mutex::new(HashMap::new()),
             });
             Ok(())
@@ -683,10 +579,8 @@ pub fn run() {
             get_app_settings,
             get_infisical_config,
             save_app_settings,
-            save_infisical_config,
             suggest_env_path,
             test_env_file,
-            test_infisical_connection,
             ssh_open,
             ssh_write,
             ssh_resize,

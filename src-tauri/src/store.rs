@@ -1,10 +1,7 @@
-use crate::models::{AppData, Favorite, InfisicalConfig, Server};
+use crate::models::{AppData, Favorite, Server};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::PathBuf;
-
-const KEYRING_SERVICE: &str = "servermanager";
-const KEYRING_USER: &str = "infisical-client-secret";
 
 pub struct Store {
     path: PathBuf,
@@ -79,16 +76,6 @@ impl Store {
 
     pub fn delete_favorite(&mut self, id: &str) -> Result<()> {
         self.data.favorites.retain(|f| f.id != id);
-        self.persist()?;
-        Ok(())
-    }
-
-    pub fn get_infisical_config(&self) -> InfisicalConfig {
-        self.data.infisical.clone()
-    }
-
-    pub fn set_infisical_config(&mut self, config: InfisicalConfig) -> Result<()> {
-        self.data.infisical = config;
         self.persist()?;
         Ok(())
     }
@@ -173,29 +160,4 @@ fn sanitize_filename(name: &str) -> String {
     } else {
         s
     }
-}
-
-pub fn save_client_secret(secret: &str) -> Result<()> {
-    let entry =
-        keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).context("create keyring entry")?;
-    if secret.is_empty() {
-        let _ = entry.delete_credential();
-    } else {
-        entry.set_password(secret).context("store client secret")?;
-    }
-    Ok(())
-}
-
-pub fn load_client_secret() -> Result<String> {
-    let entry =
-        keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).context("create keyring entry")?;
-    match entry.get_password() {
-        Ok(v) => Ok(v),
-        Err(keyring::Error::NoEntry) => Ok(String::new()),
-        Err(e) => Err(e).context("read client secret"),
-    }
-}
-
-pub fn client_secret_configured() -> bool {
-    load_client_secret().map(|s| !s.is_empty()).unwrap_or(false)
 }

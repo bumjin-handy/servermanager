@@ -1,5 +1,4 @@
 export type AuthType = "password" | "privateKey";
-export type CredentialSource = "env" | "infisical";
 export type FavoriteType = "command" | "path" | "localPath" | "remotePath";
 
 /** Path favorites for the local file-manager site (not tied to an SSH server). */
@@ -12,14 +11,9 @@ export interface Server {
   port: number;
   username: string;
   authType: AuthType;
-  credentialSource: CredentialSource;
-  /** Legacy field; memory credentials do not use an env file. */
+  /** Path for .env file recommendation/validation (not used for credentials). */
   envFilePath: string;
   envKey: string;
-  infisicalProjectId: string;
-  infisicalEnv: string;
-  infisicalSecretPath: string;
-  infisicalSecretName: string;
   /** Remote log paths for log-collect (`tail -f`), one path per entry */
   logCollectPaths: string[];
 }
@@ -36,11 +30,6 @@ export interface Favorite {
 export interface AppSettingsView {
   defaultEnvDir: string;
   resolvedDefaultEnvDir: string;
-  siteUrl: string;
-  clientId: string;
-  projectId: string;
-  environment: string;
-  clientSecretConfigured: boolean;
 }
 
 export interface RemoteFileEntry {

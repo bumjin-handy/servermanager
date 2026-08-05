@@ -4,7 +4,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 앱 ID: `com.servermanager.desktop`
 
-관련 문서: [README.md](../README.md), [infisical.md](infisical.md)
+관련 문서: [README.md](../README.md)
 
 ---
 
@@ -14,16 +14,16 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 |------|------|
 | 데스크톱 | Tauri 2 |
 | UI | React 19, Vite, xterm.js, react-resizable-panels |
-| 백엔드 | Rust — russh, russh-sftp, dotenvy, keyring, reqwest |
-| 데이터 | `%APPDATA%\com.servermanager.desktop\store.json` + 서버별 `env\` |
+| 백엔드 | Rust — russh, russh-sftp |
+| 데이터 | `%APPDATA%\com.servermanager.desktop\store.json` |
 
 ---
 
 ## 2. 레이아웃·셸
 
-- **좌측**: 서버 목록 (추가 / 선택 / 더블클릭 새 터미널 / 우클릭 편집 / 삭제), 상단 **SQL Bind**, 하단 **설정**
+- **좌측**: 서버 목록 (추가 / 선택 / 더블클릭 새 터미널 / 우클릭 편집 / 삭제), 하단 **설정**
 - **우측**: 선택한 서버의 워크스페이스 (툴바 + 패널). 서버를 바꿔도 다른 서버 워크스페이스는 **언마운트하지 않음** (숨김만)
-- **설정**: Infisical·기본 `.env` 디렉터리 등 앱 전역 설정
+- **설정**: 기본 `.env` 디렉터리 등 앱 전역 설정
 - 다크 테마 셸 (터미널 중심)
 
 ### 툴바 (서버 선택 시)
@@ -44,23 +44,13 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 - 필드: 이름, host, port, username
 - 인증: password / private key
-- 자격 증명 소스:
-  - **`env`(기본 UI 라벨: 접속 시 입력(메모리))** — 최초 접속 시 프롬프트, 프로세스 메모리만
-  - **Infisical(선택)** — 원격 시크릿 조회
-- 서버 데이터에는 `envFilePath` / `envKey`가 남아 있고, 경로 추천·검증에 사용 가능 (현재 UI는 `envFilePath`를 빈 값으로 저장)
+- 자격 증명: **접속 시 입력(메모리)** — 최초 접속 시 프롬프트, 프로세스 메모리만 보관
 
-### 서버별 `.env` 지원(보조)
+### 서버별 `.env` 지원(추천/검증용)
 
-- 서버마다 전용 `.env` 경로 + 키 이름 (`SSH_PASSWORD` / `SSH_PRIVATE_KEY`)를 보유할 수 있음
+- 서버마다 전용 `.env` 경로 + 키 이름 (`SSH_PASSWORD` / `SSH_PRIVATE_KEY`)을 추천 가능
 - **평문 비밀번호/개인키를 `store.json`에 영속화하지 않음**
 - 경로 추천: `{defaultEnvDir}/{englishSlug}.env` (이름에 ASCII 없으면 호스트 기반)
-- `defaultEnvDir`는 경로 추천 제안값에 사용
-
-### Infisical (선택)
-
-- 서버 자격 증명 소스를 `Infisical`로 바꾸면, 앱 전역 설정과 서버별 시크릿 경로/이름 조합으로 비밀을 조회합니다.
-- Client Secret은 OS keyring에만 보관됩니다.
-- 상세: [infisical.md](infisical.md)
 
 ---
 
@@ -209,9 +199,9 @@ Tool ▾ → **결재INI설명**. 전자결재 INI/설정 옵션 레퍼런스 �
 
 | 항목 | 설명 |
 |------|------|
-| `Server` | 접속 정보, 자격 증명 설정, `logCollectPaths` |
+| `Server` | 접속 정보, `envFilePath`, `envKey`, `logCollectPaths` |
 | `Favorite` | `command` / `path` / `localPath` / `remotePath` |
-| `AppData` | servers, favorites, Infisical, `defaultEnvDir` |
+| `AppData` | servers, favorites, `defaultEnvDir` |
 | 워크스페이스(프론트) | 서버별 panes·파일관리자·로그수집 상태 (앱 메모리, 전환 시 유지) |
 
 영속화: `store.json`. 로컬 경로 즐겨찾기는 `serverId = "__local__"`.
@@ -224,8 +214,7 @@ Tool ▾ → **결재INI설명**. 전자결재 INI/설정 옵션 레퍼런스 �
 - 서버 목록 전환: 다른 서버의 터미널·SFTP **유지**
 - 로그수집 터미널: 수집 종료 후 **자동 닫힘**
 - 로그 로컬 저장: **사용자 확인 + 폴더 선택** 후에만 수행
-- 자격 증명: 기본은 접속 시 입력 후 세션 메모리에만 보관, Infisical은 옵션
-- SQL Bind: 입력·결과는 앱 안에서만 처리
+- 자격 증명: 접속 시 입력 후 **세션 메모리에만 보관**, 영구 저장 안 함
 
 ---
 
@@ -252,4 +241,4 @@ Tool ▾ → **결재INI설명**. 전자결재 INI/설정 옵션 레퍼런스 �
 | 결재 INI 설명 | `src/components/ApprovalIniDocsPanel.tsx`, `src/lib/approvalIniDocs.ts` |
 | 텍스트 뷰어 | `src/components/TextViewerModal.tsx` |
 | API 바인딩 | `src/api.ts`, `src/types.ts` |
-| Rust | `src-tauri/src/lib.rs`, `ssh.rs`, `sftp.rs`, `local_fs.rs`, `store.rs`, `env_secrets.rs`, `infisical.rs` |
+| Rust | `src-tauri/src/lib.rs`, `ssh.rs`, `sftp.rs`, `local_fs.rs`, `store.rs`, `models.rs` |

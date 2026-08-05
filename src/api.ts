@@ -7,7 +7,6 @@ import type {
   RemoteTextContent,
   Server,
   AuthType,
-  CredentialSource,
 } from "./types";
 
 export const SECRET_REQUIRED = "SECRET_REQUIRED";
@@ -21,13 +20,8 @@ export const api = {
     port: number;
     username: string;
     authType: AuthType;
-    credentialSource: CredentialSource;
     envFilePath: string;
     envKey: string;
-    infisicalProjectId: string;
-    infisicalEnv: string;
-    infisicalSecretPath: string;
-    infisicalSecretName: string;
   }) => invoke<{ server: Server }>("upsert_server", { input }),
   deleteServer: (id: string) => invoke<void>("delete_server", { id }),
   saveLogCollectPaths: (serverId: string, paths: string[]) =>
@@ -55,11 +49,6 @@ export const api = {
   getAppSettings: () => invoke<AppSettingsView>("get_app_settings"),
   saveAppSettings: (input: {
     defaultEnvDir: string;
-    siteUrl: string;
-    clientId: string;
-    projectId: string;
-    environment: string;
-    clientSecret?: string;
   }) => invoke<void>("save_app_settings", { input }),
   getApprovalIniDocsPath: () => invoke<string>("get_approval_ini_docs_path"),
   setApprovalIniDocsPath: (path: string) =>
@@ -68,7 +57,6 @@ export const api = {
   suggestEnvPath: (serverName: string, host?: string) =>
     invoke<string>("suggest_env_path", { serverName, host: host ?? null }),
   testEnvFile: (path: string) => invoke<string>("test_env_file", { path }),
-  testInfisicalConnection: () => invoke<void>("test_infisical_connection"),
 
   sshOpen: (serverId: string, sessionId: string, cols: number, rows: number) =>
     invoke<void>("ssh_open", { serverId, sessionId, cols, rows }),

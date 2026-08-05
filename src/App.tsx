@@ -18,7 +18,7 @@ import { ApprovalToolPanel } from "./components/ApprovalToolPanel";
 import { ApprovalIniDocsPanel } from "./components/ApprovalIniDocsPanel";
 import { TerminalPane, sendCtrlC, writeToSession } from "./components/TerminalPane";
 import { joinLocal, toNativeLocalPath } from "./components/fileManagerShared";
-import type { AppSettingsView, Server, WorkspacePane } from "./types";
+import type { Server, WorkspacePane } from "./types";
 import { openPath } from "@tauri-apps/plugin-opener";
 import "./App.css";
 
@@ -84,7 +84,6 @@ function App() {
   const [showApprovalTool, setShowApprovalTool] = useState(false);
   const [showApprovalIniDocs, setShowApprovalIniDocs] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
-  const [settings, setSettings] = useState<AppSettingsView | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
 
   const [secretPrompt, setSecretPrompt] = useState<{
@@ -157,12 +156,11 @@ function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [list, cfg] = await Promise.all([
+        const [list] = await Promise.all([
           api.listServers(),
           api.getAppSettings(),
         ]);
         setServers(list);
-        setSettings(cfg);
         if (list[0]) {
           setSelectedId(list[0].id);
         }
@@ -692,7 +690,7 @@ function App() {
             <div>
               <h3>Server Manager</h3>
               <p>좌측에서 서버를 추가하거나 선택하세요.</p>
-              <p className="sub">암호/개인키는 접속 시 한 번만 입력받아 메모리에 보관하고, Infisical은 선택적으로 사용할 수 있습니다.</p>
+              <p className="sub">암호/개인키는 접속 시 한 번만 입력받아 메모리에 보관합니다.</p>
             </div>
           </div>
         ) : (
@@ -803,10 +801,6 @@ function App() {
       {showServerModal && (
         <ServerModal
           initial={editingServer}
-          defaults={{
-            projectId: settings?.projectId ?? "",
-            environment: settings?.environment ?? "dev",
-          }}
           onClose={() => setShowServerModal(false)}
           onSaved={async (server) => {
             setShowServerModal(false);
@@ -819,7 +813,7 @@ function App() {
       {showSettings && (
         <SettingsModal
           onClose={() => setShowSettings(false)}
-          onSaved={(cfg) => setSettings(cfg)}
+          onSaved={() => {}}
         />
       )}
 

@@ -8,14 +8,6 @@ pub enum AuthType {
     PrivateKey,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub enum CredentialSource {
-    #[default]
-    Env,
-    Infisical,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Server {
@@ -26,23 +18,12 @@ pub struct Server {
     pub username: String,
     #[serde(default)]
     pub auth_type: AuthType,
-    /// Default: read secret from this server's `.env` file (`env_file_path` + `env_key`).
-    #[serde(default)]
-    pub credential_source: CredentialSource,
-    /// Absolute path to this server's dedicated `.env` file.
+    /// Absolute path to this server's dedicated `.env` file (recommendation/validation only).
     #[serde(default)]
     pub env_file_path: String,
     /// Variable name inside that `.env` (default: SSH_PASSWORD / SSH_PRIVATE_KEY).
     #[serde(default)]
     pub env_key: String,
-    #[serde(default)]
-    pub infisical_project_id: String,
-    #[serde(default)]
-    pub infisical_env: String,
-    #[serde(default)]
-    pub infisical_secret_path: String,
-    #[serde(default)]
-    pub infisical_secret_name: String,
     /// Relative (or absolute) log file paths for remote log collection (`tail -f`).
     #[serde(default)]
     pub log_collect_paths: Vec<String>,
@@ -73,15 +54,6 @@ pub struct Favorite {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct InfisicalConfig {
-    pub site_url: String,
-    pub client_id: String,
-    pub project_id: String,
-    pub environment: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct AppData {
     pub servers: Vec<Server>,
     pub favorites: Vec<Favorite>,
@@ -91,8 +63,6 @@ pub struct AppData {
     /// Remembered local path to HANDY HSO Approval INI xlsx (not committed; user-selected).
     #[serde(default)]
     pub approval_ini_docs_path: String,
-    #[serde(default)]
-    pub infisical: InfisicalConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
