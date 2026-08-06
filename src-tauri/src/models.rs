@@ -65,6 +65,20 @@ pub struct AppData {
     /// Remembered local path to HANDY HSO Approval INI xlsx (not committed; user-selected).
     #[serde(default)]
     pub approval_ini_docs_path: String,
+    /// OpenAI-compatible API base URL (non-secret).
+    #[serde(default = "default_ai_base_url")]
+    pub ai_base_url: String,
+    /// Model name for chat completions (non-secret).
+    #[serde(default = "default_ai_model")]
+    pub ai_model: String,
+}
+
+fn default_ai_base_url() -> String {
+    "https://api.tokenrouter.com/v1".to_string()
+}
+
+fn default_ai_model() -> String {
+    "moonshotai/kimi-k3-free".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

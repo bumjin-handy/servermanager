@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { v4 as uuid } from "uuid";
-import { api, runWithSessionSecret, registerPromptHandler } from "./api";
+import { api, runWithSessionSecret, registerPromptHandler, registerAiPromptHandler } from "./api";
 import { FavoritesPanel, type FavoriteRunTarget } from "./components/FavoritesPanel";
 import { SecretPromptModal } from "./components/SecretPromptModal";
 import { FilesPane } from "./components/FilesPane";
@@ -13,6 +13,7 @@ import {
 } from "./components/LogCollectPanel";
 import { RemoteLogViewer } from "./components/RemoteLogViewer";
 import { ConfigPanel } from "./components/ConfigPanel";
+import { AiChatPanel } from "./components/AiChatPanel";
 import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { SqlBindPanel } from "./components/SqlBindPanel";
@@ -20,7 +21,7 @@ import { ApprovalToolPanel } from "./components/ApprovalToolPanel";
 import { ApprovalIniDocsPanel } from "./components/ApprovalIniDocsPanel";
 import { TerminalPane, sendCtrlC, writeToSession } from "./components/TerminalPane";
 import { joinLocal, toNativeLocalPath } from "./components/fileManagerShared";
-import type { Server, WorkspacePane } from "./types";
+import type { ChatMessage, Server, WorkspacePane } from "./types";
 import { openPath } from "@tauri-apps/plugin-opener";
 import "./App.css";
 
@@ -30,6 +31,8 @@ interface ServerWorkspace {
   fileManagerOpen: boolean;
   logViewerOpen: boolean;
   configOpen: boolean;
+  aiChatOpen: boolean;
+  aiMessages: ChatMessage[];
   logCollectOpen: boolean;
   logCollecting: boolean;
   logOutputs: LogCollectOutput[];
@@ -63,6 +66,8 @@ function createEmptyWorkspace(): ServerWorkspace {
     fileManagerOpen: false,
     logViewerOpen: false,
     configOpen: false,
+    aiChatOpen: false,
+    aiMessages: [],
     logCollectOpen: false,
     logCollecting: false,
     logOutputs: [],
@@ -98,11 +103,21 @@ function App() {
     resolve: (val: string) => void;
     reject: (err: Error) => void;
   } | null>(null);
+  const [aiKeyPrompt, setAiKeyPrompt] = useState<{
+    label: string;
+    resolve: (val: string) => void;
+    reject: (err: Error) => void;
+  } | null>(null);
 
   useEffect(() => {
     registerPromptHandler((label) => {
       return new Promise<string>((resolve, reject) => {
         setSecretPrompt({ label, resolve, reject });
+      });
+    });
+    registerAiPromptHandler((label) => {
+      return new Promise<string>((resolve, reject) => {
+        setAiKeyPrompt({ label, resolve, reject });
       });
     });
   }, []);
@@ -118,6 +133,7 @@ function App() {
   const fileManagerOpen = ws?.fileManagerOpen ?? false;
   const logViewerOpen = ws?.logViewerOpen ?? false;
   const configOpen = ws?.configOpen ?? false;
+  const aiChatOpen = ws?.aiChatOpen ?? false;
   const logCollectOpen = ws?.logCollectOpen ?? false;
   const logCollecting = ws?.logCollecting ?? false;
   const logOutputs = ws?.logOutputs ?? [];
@@ -663,6 +679,26 @@ function App() {
             />
           </div>
         )}
+
+        {workspace.aiChatOpen && (
+          <div className="ai-chat-layer">
+            <AiChatPanel
+              server={server}
+              messages={workspace.aiMessages}
+              onMessagesChange={(aiMessages) => {
+                if (!visible) return;
+                patchWorkspace(server.id, (current) => ({ ...current, aiMessages }));
+              }}
+              onClose={() => {
+                if (!visible) return;
+                patchWorkspace(server.id, (current) => ({
+                  ...current,
+                  aiChatOpen: false,
+                }));
+              }}
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -830,10 +866,26 @@ function App() {
                     ...current,
                     configOpen: !current.configOpen,
                     fileManagerOpen: false,
+                    aiChatOpen: false,
                   }))
                 }
               >
                 {configOpen ? "Config 숨김" : "Config"}
+              </button>
+              <button
+                className={`btn${aiChatOpen ? " primary" : ""}`}
+                type="button"
+                onClick={() =>
+                  patchSelected((current) => ({
+                    ...current,
+                    aiChatOpen: !current.aiChatOpen,
+                    fileManagerOpen: false,
+                    configOpen: false,
+                    logViewerOpen: false,
+                  }))
+                }
+              >
+                {aiChatOpen ? "AI 숨김" : "AI"}
               </button>
               <div className="toolbar-menu toolbar-log-menu">
                 <button
@@ -943,6 +995,20 @@ function App() {
           onCancel={() => {
             secretPrompt.reject(new Error("cancel"));
             setSecretPrompt(null);
+          }}
+        />
+      )}
+
+      {aiKeyPrompt && (
+        <SecretPromptModal
+          label={aiKeyPrompt.label}
+          onSubmit={(value) => {
+            aiKeyPrompt.resolve(value);
+            setAiKeyPrompt(null);
+          }}
+          onCancel={() => {
+            aiKeyPrompt.reject(new Error("cancel"));
+            setAiKeyPrompt(null);
           }}
         />
       )}

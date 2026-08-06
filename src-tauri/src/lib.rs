@@ -1,3 +1,4 @@
+mod ai;
 mod local_fs;
 mod models;
 mod sftp;
@@ -27,6 +28,8 @@ struct AppState {
     sftp: SftpManager,
     /// Per-server secrets kept only in RAM for this app process.
     session_secrets: Mutex<HashMap<String, String>>,
+    /// AI API key kept only in RAM for this app process.
+    ai_api_key: Mutex<Option<String>>,
 }
 
 fn err_string(e: impl std::fmt::Display) -> String {
@@ -211,6 +214,8 @@ fn delete_favorite(state: State<'_, AppState>, id: String) -> Result<(), String>
 struct AppSettingsView {
     default_env_dir: String,
     resolved_default_env_dir: String,
+    ai_base_url: String,
+    ai_model: String,
 }
 
 #[tauri::command]
@@ -220,6 +225,8 @@ fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettingsView, Strin
     Ok(AppSettingsView {
         default_env_dir: store.get_default_env_dir(),
         resolved_default_env_dir: resolved.display().to_string(),
+        ai_base_url: store.get_ai_base_url(),
+        ai_model: store.get_ai_model(),
     })
 }
 
@@ -233,6 +240,8 @@ fn get_infisical_config(state: State<'_, AppState>) -> Result<AppSettingsView, S
 #[serde(rename_all = "camelCase")]
 struct SaveAppSettingsInput {
     default_env_dir: String,
+    ai_base_url: String,
+    ai_model: String,
 }
 
 #[tauri::command]
@@ -244,7 +253,65 @@ fn save_app_settings(
     store
         .set_default_env_dir(input.default_env_dir)
         .map_err(err_string)?;
+    store
+        .set_ai_settings(input.ai_base_url, input.ai_model)
+        .map_err(err_string)?;
     Ok(())
+}
+
+#[tauri::command]
+fn set_ai_api_key(state: State<'_, AppState>, key: String) -> Result<(), String> {
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        return Err("API 키가 비어 있습니다".to_string());
+    }
+    *state.ai_api_key.lock().map_err(|e| e.to_string())? = Some(trimmed.to_string());
+    Ok(())
+}
+
+#[tauri::command]
+fn clear_ai_api_key(state: State<'_, AppState>) -> Result<(), String> {
+    *state.ai_api_key.lock().map_err(|e| e.to_string())? = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn has_ai_api_key(state: State<'_, AppState>) -> Result<bool, String> {
+    Ok(state
+        .ai_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .is_some())
+}
+
+#[tauri::command]
+async fn ai_chat_stream(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request_id: String,
+    messages: Vec<ai::ChatMessage>,
+) -> Result<(), String> {
+    let api_key = state
+        .ai_api_key
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| ai::AI_KEY_REQUIRED.to_string())?;
+
+    let (base_url, model) = {
+        let store = state.store.lock().map_err(|e| e.to_string())?;
+        (store.get_ai_base_url(), store.get_ai_model())
+    };
+
+    ai::chat_stream(
+        app,
+        &api_key,
+        &base_url,
+        &model,
+        &request_id,
+        messages,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -582,6 +649,7 @@ pub fn run() {
                 ssh: SshManager::new(),
                 sftp: SftpManager::new(),
                 session_secrets: Mutex::new(HashMap::new()),
+                ai_api_key: Mutex::new(None),
             });
             Ok(())
         })
@@ -599,6 +667,10 @@ pub fn run() {
             get_app_settings,
             get_infisical_config,
             save_app_settings,
+            set_ai_api_key,
+            clear_ai_api_key,
+            has_ai_api_key,
+            ai_chat_stream,
             suggest_env_path,
             test_env_file,
             ssh_open,

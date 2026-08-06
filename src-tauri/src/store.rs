@@ -100,6 +100,31 @@ impl Store {
         Ok(())
     }
 
+    pub fn get_ai_base_url(&self) -> String {
+        let v = self.data.ai_base_url.trim();
+        if v.is_empty() {
+            crate::ai::DEFAULT_AI_BASE_URL.to_string()
+        } else {
+            v.to_string()
+        }
+    }
+
+    pub fn get_ai_model(&self) -> String {
+        let v = self.data.ai_model.trim();
+        if v.is_empty() {
+            crate::ai::DEFAULT_AI_MODEL.to_string()
+        } else {
+            v.to_string()
+        }
+    }
+
+    pub fn set_ai_settings(&mut self, base_url: String, model: String) -> Result<()> {
+        self.data.ai_base_url = base_url.trim().to_string();
+        self.data.ai_model = model.trim().to_string();
+        self.persist()?;
+        Ok(())
+    }
+
     /// Directory used when suggesting per-server env files.
     pub fn resolve_default_env_dir(&self) -> PathBuf {
         let configured = self.data.default_env_dir.trim();

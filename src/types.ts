@@ -30,6 +30,36 @@ export interface Favorite {
 export interface AppSettingsView {
   defaultEnvDir: string;
   resolvedDefaultEnvDir: string;
+  aiBaseUrl: string;
+  aiModel: string;
+}
+
+export type ChatRole = "user" | "assistant" | "system";
+
+export interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+export interface AiChatChunkEvent {
+  requestId: string;
+  delta: string;
+}
+
+export interface AiChatDoneEvent {
+  requestId: string;
+}
+
+export interface AiChatErrorEvent {
+  requestId: string;
+  message: string;
+}
+
+export interface AiAttachment {
+  kind: "file" | "log";
+  path: string;
+  label: string;
+  content: string;
 }
 
 export interface RemoteFileEntry {

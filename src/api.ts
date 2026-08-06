@@ -7,9 +7,11 @@ import type {
   RemoteTextContent,
   Server,
   AuthType,
+  ChatMessage,
 } from "./types";
 
 export const SECRET_REQUIRED = "SECRET_REQUIRED";
+export const AI_KEY_REQUIRED = "AI_KEY_REQUIRED";
 
 export const api = {
   listServers: () => invoke<Server[]>("list_servers"),
@@ -49,6 +51,8 @@ export const api = {
   getAppSettings: () => invoke<AppSettingsView>("get_app_settings"),
   saveAppSettings: (input: {
     defaultEnvDir: string;
+    aiBaseUrl: string;
+    aiModel: string;
   }) => invoke<void>("save_app_settings", { input }),
   getApprovalIniDocsPath: () => invoke<string>("get_approval_ini_docs_path"),
   setApprovalIniDocsPath: (path: string) =>
@@ -91,10 +95,20 @@ export const api = {
   localParent: (path: string) => invoke<string>("local_parent", { path }),
   openLocalWithEditor: (path: string, editor: "cursor" | "vscode" | "editplus") =>
     invoke<void>("open_local_with_editor", { path, editor }),
+
+  setAiApiKey: (key: string) => invoke<void>("set_ai_api_key", { key }),
+  clearAiApiKey: () => invoke<void>("clear_ai_api_key"),
+  hasAiApiKey: () => invoke<boolean>("has_ai_api_key"),
+  aiChatStream: (requestId: string, messages: ChatMessage[]) =>
+    invoke<void>("ai_chat_stream", { requestId, messages }),
 };
 
 export function isSecretRequired(error: unknown) {
   return String(error) === SECRET_REQUIRED;
+}
+
+export function isAiKeyRequired(error: unknown) {
+  return String(error) === AI_KEY_REQUIRED;
 }
 
 export const AUTH_FAILED = "AUTH_FAILED";
@@ -158,6 +172,49 @@ export async function runWithSessionSecret<T>(
         continue;
       }
 
+      throw e;
+    }
+  }
+}
+
+let aiPromptHandler: ((label: string) => Promise<string>) | null = null;
+
+export function registerAiPromptHandler(handler: (label: string) => Promise<string>) {
+  aiPromptHandler = handler;
+}
+
+export async function promptForAiApiKey(label = "AI API 키 (TokenRouter 등)") {
+  if (aiPromptHandler) {
+    try {
+      const key = await aiPromptHandler(label);
+      await api.setAiApiKey(key);
+      return;
+    } catch {
+      throw new Error("API 키 입력이 취소되었습니다.");
+    }
+  }
+
+  const key = window.prompt(
+    `${label}를 입력하세요.\n입력값은 현재 앱 실행 중 메모리에만 저장됩니다.`,
+  );
+  if (!key?.trim()) {
+    throw new Error("API 키 입력이 취소되었습니다.");
+  }
+  await api.setAiApiKey(key);
+}
+
+export async function runWithAiApiKey<T>(
+  action: () => Promise<T>,
+  label?: string,
+): Promise<T> {
+  while (true) {
+    try {
+      return await action();
+    } catch (e) {
+      if (isAiKeyRequired(e)) {
+        await promptForAiApiKey(label);
+        continue;
+      }
       throw e;
     }
   }

@@ -16,3 +16,4 @@ Tauri 2 + React SSH Server Manager. Credentials are stored in **session memory o
 - SQL Bind is client-side only (`src/lib/sqlBinder.ts` + `SqlBindPanel`); no Rust/network.
 - Approval INI docs: user-selected local xlsx path in `store.json` only; do not commit the Excel/JSON (`ApprovalIniDocsPanel` + `approvalIniDocs.ts`).
 - Log download "open in editor" uses `open_local_with_editor` (Cursor / VS Code / EditPlus).
+- AI chat: OpenAI-compatible HTTP in Rust (`ai.rs`); API key session-only (not in `store.json`). Base URL/model in settings. Per-server overlay; attachments use SFTP read.
