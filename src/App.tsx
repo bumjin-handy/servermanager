@@ -867,6 +867,8 @@ function App() {
                     configOpen: !current.configOpen,
                     fileManagerOpen: false,
                     aiChatOpen: false,
+                    logViewerOpen: false,
+                    logCollectOpen: false,
                   }))
                 }
               >
@@ -882,6 +884,7 @@ function App() {
                     fileManagerOpen: false,
                     configOpen: false,
                     logViewerOpen: false,
+                    logCollectOpen: false,
                   }))
                 }
               >
@@ -893,7 +896,17 @@ function App() {
                   type="button"
                   aria-expanded={logMenuOpen}
                   aria-haspopup="menu"
-                  onClick={() => setLogMenuOpen((v) => !v)}
+                  onClick={() => {
+                    const next = !logMenuOpen;
+                    setLogMenuOpen(next);
+                    if (next) {
+                      patchSelected((current) => ({
+                        ...current,
+                        configOpen: false,
+                        aiChatOpen: false,
+                      }));
+                    }
+                  }}
                 >
                   로그{logCollecting ? " ●" : ""} ▾
                 </button>
@@ -912,7 +925,13 @@ function App() {
                         role="menuitem"
                         onClick={() => {
                           setLogMenuOpen(false);
-                          patchSelected((current) => ({ ...current, logCollectOpen: true }));
+                          patchSelected((current) => ({
+                            ...current,
+                            logCollectOpen: true,
+                            configOpen: false,
+                            aiChatOpen: false,
+                            logViewerOpen: false,
+                          }));
                         }}
                       >
                         로그수집{logCollecting ? " ●" : ""}
@@ -927,6 +946,9 @@ function App() {
                             ...current,
                             logViewerOpen: !current.logViewerOpen,
                             fileManagerOpen: false,
+                            configOpen: false,
+                            aiChatOpen: false,
+                            logCollectOpen: false,
                           }));
                         }}
                       >
