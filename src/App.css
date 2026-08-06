@@ -1995,3 +1995,294 @@ button {
 }
 
 
+
+/* ============================================================
+   RemoteLogViewer
+   ============================================================ */
+
+.rlv-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.rlv-wrap.rlv-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg);
+}
+
+/* header */
+.rlv-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.rlv-title {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.rlv-path-row {
+  display: flex;
+  flex: 1;
+  min-width: 240px;
+  gap: 6px;
+  align-items: center;
+}
+
+.rlv-select {
+  height: 28px;
+  max-width: 220px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.rlv-path-input {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 10px;
+  font-size: 12px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  outline: none;
+}
+
+.rlv-path-input:focus {
+  border-color: var(--accent);
+}
+
+.rlv-header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.rlv-btn {
+  height: 28px;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+/* log section */
+.rlv-log-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: #0d1117;
+}
+
+/* toolbar */
+.rlv-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.rlv-line-badge {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  margin-right: 4px;
+}
+
+.rlv-line-badge strong {
+  color: var(--text);
+}
+
+.rlv-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 120px;
+  max-width: 280px;
+}
+
+.rlv-search {
+  width: 100%;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+.rlv-search:focus {
+  border-color: var(--accent);
+}
+
+.rlv-match-count {
+  position: absolute;
+  right: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.rlv-icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+}
+
+.rlv-icon-btn-active {
+  background: var(--accent-dim) !important;
+  border-color: rgba(61, 185, 232, 0.5) !important;
+  color: var(--accent) !important;
+}
+
+.rlv-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.rlv-level-select {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+/* log lines */
+.rlv-lines {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 4px 0;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rlv-line {
+  display: flex;
+  gap: 6px;
+  padding: 1px 10px;
+  border-radius: 2px;
+}
+
+.rlv-line:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rlv-line-current {
+  background: rgba(61, 185, 232, 0.14) !important;
+  outline: 1px solid rgba(61, 185, 232, 0.35);
+}
+
+.rlv-line-num {
+  width: 42px;
+  text-align: right;
+  color: #484f58;
+  flex-shrink: 0;
+  user-select: none;
+  font-size: 11px;
+}
+
+.rlv-line-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre;
+  word-break: keep-all;
+}
+
+.log-highlight {
+  background: rgba(227, 179, 65, 0.4);
+  color: #e3b341;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.rlv-empty {
+  padding: 32px;
+  text-align: center;
+  color: #484f58;
+  font-size: 13px;
+}
+
+/* status bar */
+.rlv-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.rlv-status.rlv-status-err {
+  color: #ffb4b0;
+}
+
+.rlv-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+  animation: rlv-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes rlv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* log viewer layer (파일관리자와 동일한 오버레이 패턴) */
+.log-viewer-layer {
+  grid-area: 1 / 1;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* log menu dropdown */
+.toolbar-log-menu {
+  position: relative;
+}

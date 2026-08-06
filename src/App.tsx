@@ -11,6 +11,7 @@ import {
   type LogCollectFilter,
   type LogCollectOutput,
 } from "./components/LogCollectPanel";
+import { RemoteLogViewer } from "./components/RemoteLogViewer";
 import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { SqlBindPanel } from "./components/SqlBindPanel";
@@ -26,6 +27,7 @@ interface ServerWorkspace {
   panes: WorkspacePane[];
   activePaneId: string | null;
   fileManagerOpen: boolean;
+  logViewerOpen: boolean;
   logCollectOpen: boolean;
   logCollecting: boolean;
   logOutputs: LogCollectOutput[];
@@ -57,6 +59,7 @@ function createEmptyWorkspace(): ServerWorkspace {
     panes: [term],
     activePaneId: term.id,
     fileManagerOpen: false,
+    logViewerOpen: false,
     logCollectOpen: false,
     logCollecting: false,
     logOutputs: [],
@@ -84,6 +87,7 @@ function App() {
   const [showApprovalTool, setShowApprovalTool] = useState(false);
   const [showApprovalIniDocs, setShowApprovalIniDocs] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [logMenuOpen, setLogMenuOpen] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
   const [secretPrompt, setSecretPrompt] = useState<{
@@ -109,6 +113,7 @@ function App() {
   const panes = ws?.panes ?? [];
   const activePaneId = ws?.activePaneId ?? null;
   const fileManagerOpen = ws?.fileManagerOpen ?? false;
+  const logViewerOpen = ws?.logViewerOpen ?? false;
   const logCollectOpen = ws?.logCollectOpen ?? false;
   const logCollecting = ws?.logCollecting ?? false;
   const logOutputs = ws?.logOutputs ?? [];
@@ -624,6 +629,21 @@ function App() {
             </div>
           </div>
         )}
+
+        {workspace.logViewerOpen && (
+          <div className="log-viewer-layer">
+            <RemoteLogViewer
+              server={server}
+              onClose={() => {
+                if (!visible) return;
+                patchWorkspace(server.id, (current) => ({
+                  ...current,
+                  logViewerOpen: false,
+                }));
+              }}
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -764,15 +784,55 @@ function App() {
                   </>
                 )}
               </div>
-              <button
-                className={`btn${logCollectOpen || logCollecting ? " primary" : ""}`}
-                type="button"
-                onClick={() =>
-                  patchSelected((current) => ({ ...current, logCollectOpen: true }))
-                }
-              >
-                로그수집{logCollecting ? " ●" : ""}
-              </button>
+              <div className="toolbar-menu toolbar-log-menu">
+                <button
+                  className={`btn${logCollectOpen || logCollecting || logViewerOpen || logMenuOpen ? " primary" : ""}`}
+                  type="button"
+                  aria-expanded={logMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setLogMenuOpen((v) => !v)}
+                >
+                  로그{logCollecting ? " ●" : ""} ▾
+                </button>
+                {logMenuOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className="toolbar-menu-backdrop"
+                      aria-label="메뉴 닫기"
+                      onClick={() => setLogMenuOpen(false)}
+                    />
+                    <div className="toolbar-menu-dropdown" role="menu">
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setLogMenuOpen(false);
+                          patchSelected((current) => ({ ...current, logCollectOpen: true }));
+                        }}
+                      >
+                        로그수집{logCollecting ? " ●" : ""}
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setLogMenuOpen(false);
+                          patchSelected((current) => ({
+                            ...current,
+                            logViewerOpen: !current.logViewerOpen,
+                            fileManagerOpen: false,
+                          }));
+                        }}
+                      >
+                        {logViewerOpen ? "로그 뷰어 숨김" : "로그 뷰어"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button
                 className={`btn${showSqlBind ? " primary" : ""}`}
                 type="button"
