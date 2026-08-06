@@ -38,6 +38,8 @@ pub enum FavoriteType {
     LocalPath,
     /// File manager — remote site bookmark for a specific server.
     RemotePath,
+    /// Config panel — remote config file bookmark.
+    ConfigPath,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

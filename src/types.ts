@@ -1,5 +1,5 @@
 export type AuthType = "password" | "privateKey";
-export type FavoriteType = "command" | "path" | "localPath" | "remotePath";
+export type FavoriteType = "command" | "path" | "localPath" | "remotePath" | "configPath";
 
 /** Path favorites for the local file-manager site (not tied to an SSH server). */
 export const LOCAL_FAVORITES_SERVER_ID = "__local__";

@@ -395,6 +395,26 @@ async fn sftp_read_text(
 }
 
 #[tauri::command]
+async fn sftp_write_text(
+    state: State<'_, AppState>,
+    server_id: String,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    if content.len() as u64 > SFTP_TEXT_MAX_BYTES {
+        return Err(format!(
+            "내용이 너무 큽니다 (최대 {} bytes)",
+            SFTP_TEXT_MAX_BYTES
+        ));
+    }
+    state
+        .sftp
+        .write_text(&server_id, &path, &content)
+        .await
+        .map_err(err_string)
+}
+
+#[tauri::command]
 async fn sftp_download(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -590,6 +610,7 @@ pub fn run() {
             sftp_home,
             sftp_list,
             sftp_read_text,
+            sftp_write_text,
             sftp_download,
             sftp_upload,
             parent_remote_path,

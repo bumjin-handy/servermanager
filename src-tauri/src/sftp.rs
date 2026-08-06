@@ -269,6 +269,31 @@ impl SftpManager {
         let content = String::from_utf8_lossy(&data).into_owned();
         Ok((content, size, truncated))
     }
+
+    /// Create/truncate remote file and write UTF-8 text.
+    pub async fn write_text(
+        &self,
+        server_id: &str,
+        remote_path: &str,
+        content: &str,
+    ) -> Result<()> {
+        let map = self.connections.lock().await;
+        let Some(conn) = map.get(server_id) else {
+            bail!("SFTP 연결이 없습니다");
+        };
+
+        let mut remote = conn
+            .sftp
+            .create(remote_path)
+            .await
+            .with_context(|| format!("원격 파일 생성/열기 실패: {remote_path}"))?;
+        remote
+            .write_all(content.as_bytes())
+            .await
+            .context("원격 쓰기 실패")?;
+        remote.flush().await.ok();
+        Ok(())
+    }
 }
 
 pub fn parent_path(path: &str) -> String {

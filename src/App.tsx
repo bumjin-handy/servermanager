@@ -12,6 +12,7 @@ import {
   type LogCollectOutput,
 } from "./components/LogCollectPanel";
 import { RemoteLogViewer } from "./components/RemoteLogViewer";
+import { ConfigPanel } from "./components/ConfigPanel";
 import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
 import { SqlBindPanel } from "./components/SqlBindPanel";
@@ -28,6 +29,7 @@ interface ServerWorkspace {
   activePaneId: string | null;
   fileManagerOpen: boolean;
   logViewerOpen: boolean;
+  configOpen: boolean;
   logCollectOpen: boolean;
   logCollecting: boolean;
   logOutputs: LogCollectOutput[];
@@ -60,6 +62,7 @@ function createEmptyWorkspace(): ServerWorkspace {
     activePaneId: term.id,
     fileManagerOpen: false,
     logViewerOpen: false,
+    configOpen: false,
     logCollectOpen: false,
     logCollecting: false,
     logOutputs: [],
@@ -114,6 +117,7 @@ function App() {
   const activePaneId = ws?.activePaneId ?? null;
   const fileManagerOpen = ws?.fileManagerOpen ?? false;
   const logViewerOpen = ws?.logViewerOpen ?? false;
+  const configOpen = ws?.configOpen ?? false;
   const logCollectOpen = ws?.logCollectOpen ?? false;
   const logCollecting = ws?.logCollecting ?? false;
   const logOutputs = ws?.logOutputs ?? [];
@@ -644,6 +648,21 @@ function App() {
             />
           </div>
         )}
+
+        {workspace.configOpen && (
+          <div className="config-layer">
+            <ConfigPanel
+              server={server}
+              onClose={() => {
+                if (!visible) return;
+                patchWorkspace(server.id, (current) => ({
+                  ...current,
+                  configOpen: false,
+                }));
+              }}
+            />
+          </div>
+        )}
       </div>
     );
   };
@@ -725,12 +744,9 @@ function App() {
               <button className="btn" type="button" onClick={addTerminal}>
                 새 터미널
               </button>
-              <button className="btn" type="button" onClick={() => void openLocalExplorer()}>
-                로컬 탐색기
-              </button>
               <div className="toolbar-menu">
                 <button
-                  className={`btn${fileManagerOpen || showApprovalTool || showApprovalIniDocs || toolMenuOpen ? " primary" : ""}`}
+                  className={`btn${fileManagerOpen || showApprovalTool || showApprovalIniDocs || showSqlBind || toolMenuOpen ? " primary" : ""}`}
                   type="button"
                   aria-expanded={toolMenuOpen}
                   aria-haspopup="menu"
@@ -753,10 +769,32 @@ function App() {
                         role="menuitem"
                         onClick={() => {
                           setToolMenuOpen(false);
+                          void openLocalExplorer();
+                        }}
+                      >
+                        로컬 탐색기
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setToolMenuOpen(false);
                           toggleFileManager();
                         }}
                       >
                         {fileManagerOpen ? "파일 관리자 숨김" : "파일 관리자"}
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setToolMenuOpen(false);
+                          setShowSqlBind(true);
+                        }}
+                      >
+                        SQL Bind
                       </button>
                       <button
                         type="button"
@@ -784,6 +822,19 @@ function App() {
                   </>
                 )}
               </div>
+              <button
+                className={`btn${configOpen ? " primary" : ""}`}
+                type="button"
+                onClick={() =>
+                  patchSelected((current) => ({
+                    ...current,
+                    configOpen: !current.configOpen,
+                    fileManagerOpen: false,
+                  }))
+                }
+              >
+                {configOpen ? "Config 숨김" : "Config"}
+              </button>
               <div className="toolbar-menu toolbar-log-menu">
                 <button
                   className={`btn${logCollectOpen || logCollecting || logViewerOpen || logMenuOpen ? " primary" : ""}`}
@@ -833,13 +884,6 @@ function App() {
                   </>
                 )}
               </div>
-              <button
-                className={`btn${showSqlBind ? " primary" : ""}`}
-                type="button"
-                onClick={() => setShowSqlBind(true)}
-              >
-                SQL Bind
-              </button>
               <button className="btn" type="button" onClick={addFavoritesPane}>
                 즐겨찾기
               </button>

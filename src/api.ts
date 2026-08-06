@@ -73,6 +73,8 @@ export const api = {
     invoke<RemoteFileEntry[]>("sftp_list", { serverId, path }),
   sftpReadText: (serverId: string, path: string) =>
     invoke<RemoteTextContent>("sftp_read_text", { serverId, path }),
+  sftpWriteText: (serverId: string, path: string, content: string) =>
+    invoke<void>("sftp_write_text", { serverId, path, content }),
   sftpDownload: (serverId: string, remotePath: string, localPath: string) =>
     invoke<void>("sftp_download", { serverId, remotePath, localPath }),
   sftpUpload: (serverId: string, localPath: string, remotePath: string) =>
