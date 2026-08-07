@@ -2005,6 +2005,7 @@ button {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   background: var(--bg);
   font-size: 12px;
 }
@@ -2092,6 +2093,7 @@ button {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   background: #0d1117;
 }
 
@@ -2187,12 +2189,17 @@ button {
 /* log lines */
 .rlv-lines {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
   padding: 4px 0;
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.rlv-lines-body {
+  min-width: 100%;
 }
 
 .rlv-line {
@@ -2225,6 +2232,63 @@ button {
   min-width: 0;
   white-space: pre;
   word-break: keep-all;
+}
+
+.rlv-lines.is-word-wrap {
+  overflow-x: hidden;
+}
+
+.rlv-lines.is-word-wrap .rlv-line-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.rlv-lines.is-no-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+.rlv-lines.is-no-wrap .rlv-lines-body {
+  display: inline-block;
+  width: max-content;
+  min-width: 100%;
+}
+
+.rlv-lines.is-no-wrap .rlv-line {
+  display: block;
+  white-space: nowrap;
+  width: auto;
+}
+
+.rlv-lines.is-no-wrap .rlv-line-num {
+  display: inline-block;
+  width: 42px;
+  margin-right: 6px;
+  vertical-align: top;
+}
+
+.rlv-lines.is-no-wrap .rlv-line-text {
+  display: inline;
+  flex: none;
+  min-width: auto;
+  white-space: inherit;
+}
+
+.rlv-word-wrap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.rlv-word-wrap-toggle input {
+  accent-color: var(--accent);
 }
 
 .log-highlight {
@@ -2279,6 +2343,7 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--bg);
 }
 

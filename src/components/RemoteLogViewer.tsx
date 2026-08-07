@@ -103,6 +103,7 @@ export function RemoteLogViewer({ server, onClose }: Props) {
   const [levelFilter, setLevelFilter] = useState<LogLevel>("ALL");
   const [showTs, setShowTs] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [wordWrap, setWordWrap] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [statusErr, setStatusErr] = useState(false);
@@ -494,6 +495,15 @@ export function RemoteLogViewer({ server, onClose }: Props) {
             </svg>
           </button>
 
+          <label className="rlv-word-wrap-toggle" title="체크 시 긴 줄을 줄바꿈, 해제 시 가로 스크롤">
+            <input
+              type="checkbox"
+              checked={wordWrap}
+              onChange={(e) => setWordWrap(e.target.checked)}
+            />
+            Word wrap
+          </label>
+
           {/* clear */}
           <button
             className="icon-btn rlv-icon-btn"
@@ -525,7 +535,7 @@ export function RemoteLogViewer({ server, onClose }: Props) {
 
         {/* log lines */}
         <div
-          className="rlv-lines"
+          className={`rlv-lines${wordWrap ? " is-word-wrap" : " is-no-wrap"}`}
           ref={listRef}
           onScroll={() => {
             if (!listRef.current) return;
@@ -534,17 +544,19 @@ export function RemoteLogViewer({ server, onClose }: Props) {
             if (!atBottom && autoScroll) setAutoScroll(false);
           }}
         >
-          {filteredLines.length === 0 ? (
-            <div className="rlv-empty">
-              {streaming
-                ? "로그 대기 중…"
-                : activePath
-                  ? "▶ 스트림을 시작하세요"
-                  : "로그 경로를 선택하거나 입력하세요"}
-            </div>
-          ) : (
-            filteredLines.map((l) => renderLine(l))
-          )}
+          <div className="rlv-lines-body">
+            {filteredLines.length === 0 ? (
+              <div className="rlv-empty">
+                {streaming
+                  ? "로그 대기 중…"
+                  : activePath
+                    ? "▶ 스트림을 시작하세요"
+                    : "로그 경로를 선택하거나 입력하세요"}
+              </div>
+            ) : (
+              filteredLines.map((l) => renderLine(l))
+            )}
+          </div>
         </div>
 
         {/* status bar */}
