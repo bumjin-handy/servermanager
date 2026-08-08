@@ -20,9 +20,15 @@ import {
   type LogStatementUnit,
   type SqlParamType,
 } from "../lib/sqlBinder";
+import { api } from "../api";
+import { joinLocal, toNativeLocalPath } from "./fileManagerShared";
+
+type ExternalApp = "vscode" | "dbeaver";
+type ExternalMenuTarget = "log" | "result";
 
 interface Props {
   onClose: () => void;
+  initialLogText?: string | null;
 }
 
 type WorkflowFlags = {
@@ -44,7 +50,7 @@ function workflowStepClass(flags: WorkflowFlags, index: number): string {
   return classes.join(" ");
 }
 
-export function SqlBindPanel({ onClose }: Props) {
+export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
   const [dbType, setDbType] = useState<DbType>("oracle");
   const [logText, setLogText] = useState("");
   const [sql, setSql] = useState("");
@@ -59,9 +65,12 @@ export function SqlBindPanel({ onClose }: Props) {
   const [importedUnits, setImportedUnits] = useState<LogStatementUnit[]>([]);
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [externalMenuTarget, setExternalMenuTarget] = useState<ExternalMenuTarget | null>(null);
   const resultRef = useRef<HTMLTextAreaElement>(null);
-  const topRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const logExternalMenuRef = useRef<HTMLDivElement>(null);
+  const resultExternalMenuRef = useRef<HTMLDivElement>(null);
+  const externalFileRef = useRef<{ path: string; content: string } | null>(null);
 
   const placeholderCount = useMemo(() => countPlaceholders(sql), [sql]);
 
@@ -189,6 +198,59 @@ export function SqlBindPanel({ onClose }: Props) {
     setStatus(`선택한 로그가 적용되었습니다: ${unit.label}`);
   };
 
+  const loadLogContent = (text: string, sourceLabel: string | null = null) => {
+    setError(null);
+    setStatus(null);
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setError("로그 내용이 없습니다.");
+      return;
+    }
+
+    const units = splitLogStatements(trimmed);
+    if (units.length > 1) {
+      setImportedUnits(units);
+      setImportedFileName(sourceLabel);
+      selectImportedUnit(units[0]);
+      setStatus(`${units.length}건의 SQL 로그를 불러왔습니다. 목록에서 선택할 수 있습니다.`);
+      return;
+    }
+
+    setImportedUnits([]);
+    setImportedFileName(sourceLabel);
+    setSelectedUnitId(null);
+    const content = units.length === 1 ? units[0].raw : trimmed;
+    setLogText(content);
+    applyFromLog(content);
+    if (sourceLabel) {
+      setStatus("로그 뷰어에서 불러온 로그가 적용되었습니다.");
+    }
+  };
+
+  useEffect(() => {
+    if (!initialLogText?.trim()) return;
+    loadLogContent(initialLogText, "로그 뷰어");
+    // initialLogText는 열릴 때 1회만 적용
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLogText]);
+
+  useEffect(() => {
+    if (!externalMenuTarget) return;
+    const onDocClick = (e: MouseEvent) => {
+      const ref =
+        externalMenuTarget === "log" ? logExternalMenuRef : resultExternalMenuRef;
+      if (!ref.current?.contains(e.target as Node)) {
+        setExternalMenuTarget(null);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [externalMenuTarget]);
+
+  useEffect(() => {
+    externalFileRef.current = null;
+  }, [resultSql, logText]);
+
   const onImportFileChange = (e: ReactChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -229,6 +291,7 @@ export function SqlBindPanel({ onClose }: Props) {
     setImportedUnits([]);
     setImportedFileName(null);
     setSelectedUnitId(null);
+    externalFileRef.current = null;
   };
 
   const updateParamValue = (index: number, value: string) => {
@@ -282,8 +345,130 @@ export function SqlBindPanel({ onClose }: Props) {
     }
   };
 
-  const scrollToTop = () => {
-    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const getExternalContent = () => {
+    if (resultSql.trim()) return { content: resultSql, ext: "sql" as const };
+    if (logText.trim()) return { content: logText, ext: "log" as const };
+    return null;
+  };
+
+  const ensureExternalFile = async () => {
+    const payload = getExternalContent();
+    if (!payload) {
+      throw new Error("열 내용이 없습니다.");
+    }
+    if (
+      externalFileRef.current &&
+      externalFileRef.current.content === payload.content
+    ) {
+      return externalFileRef.current.path;
+    }
+
+    const home = await api.localHome();
+    const dir = joinLocal(home, "sqlbind");
+    await api.localMkdir(dir);
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filePath = joinLocal(dir, `sqlbind-${stamp}.${payload.ext}`);
+    await api.localWriteText(toNativeLocalPath(filePath), payload.content);
+    externalFileRef.current = { path: filePath, content: payload.content };
+    return filePath;
+  };
+
+  const openWithExternal = async (app: ExternalApp) => {
+    setExternalMenuTarget(null);
+    try {
+      const filePath = await ensureExternalFile();
+      await api.openLocalWithEditor(toNativeLocalPath(filePath), app);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const renderExternalMenu = (target: ExternalMenuTarget, disabled = false) => (
+    <div
+      className="sqlbind-external-menu-wrap"
+      ref={target === "log" ? logExternalMenuRef : resultExternalMenuRef}
+    >
+      <button
+        type="button"
+        className="icon-btn sqlbind-external-btn"
+        title="연결 프로그램으로 열기"
+        aria-label="연결 프로그램으로 열기"
+        aria-expanded={externalMenuTarget === target}
+        disabled={disabled}
+        onClick={(e) => {
+          e.stopPropagation();
+          setExternalMenuTarget((v) => (v === target ? null : target));
+        }}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      </button>
+      {externalMenuTarget === target && (
+        <div
+          className="context-menu sqlbind-external-menu"
+          role="menu"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="context-menu-item"
+            role="menuitem"
+            onClick={() => void openWithExternal("vscode")}
+          >
+            VS Code로 열기
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            role="menuitem"
+            onClick={() => void openWithExternal("dbeaver")}
+          >
+            DBeaver로 열기
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderBindingResult = () => {
+    if (!resultSql) return null;
+    return (
+      <div className="sqlbind-result sqlbind-result-inline">
+        <div className="sqlbind-result-header">
+          <div className="sqlbind-result-title">
+            <h4>바인딩 결과</h4>
+            {renderExternalMenu("result")}
+          </div>
+          <div className="sqlbind-actions">
+            <button type="button" className="btn primary" onClick={() => void copyResult()}>
+              {copyLabel}
+            </button>
+          </div>
+        </div>
+        <textarea
+          ref={resultRef}
+          className="sqlbind-textarea sqlbind-result-output"
+          readOnly
+          rows={6}
+          value={resultSql}
+          aria-label="바인딩된 SQL 결과"
+        />
+      </div>
+    );
   };
 
   return (
@@ -294,7 +479,7 @@ export function SqlBindPanel({ onClose }: Props) {
         aria-label="SQL Bind"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header" ref={topRef}>
+        <div className="modal-header">
           <h3>SQL Bind</h3>
           <button type="button" className="icon-btn" onClick={onClose} title="닫기">
             ×
@@ -339,9 +524,12 @@ export function SqlBindPanel({ onClose }: Props) {
           </select>
 
           <div className="sqlbind-log-header">
-            <label className="field-label" htmlFor="sqlbind-log">
-              통합 입력 (로그 붙여넣기)
-            </label>
+            <div className="sqlbind-log-title">
+              <label className="field-label" htmlFor="sqlbind-log">
+                통합 입력 (로그 붙여넣기)
+              </label>
+              {renderExternalMenu("log", !getExternalContent())}
+            </div>
             <div className="sqlbind-actions">
               <button type="button" className="btn" onClick={() => applyFromLog()}>
                 적용
@@ -382,6 +570,8 @@ export function SqlBindPanel({ onClose }: Props) {
               "예:\n... Executing Statement: SELECT ... WHERE id=?\n... Parameters: [val1, val2]\n... Types: [java.lang.String, java.lang.String]"
             }
           />
+
+          {renderBindingResult()}
 
           {importedUnits.length > 0 && (
             <div className="sqlbind-import-list" role="radiogroup" aria-label="불러온 로그 목록">
@@ -527,34 +717,6 @@ export function SqlBindPanel({ onClose }: Props) {
             </div>
           )}
 
-          {resultSql && (
-            <div className="sqlbind-result">
-              <div className="sqlbind-result-header">
-                <h4>바인딩 결과</h4>
-                <div className="sqlbind-actions">
-                  <button type="button" className="btn primary" onClick={() => void copyResult()}>
-                    {copyLabel}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={scrollToTop}
-                    title="맨 위로"
-                  >
-                    ↑
-                  </button>
-                </div>
-              </div>
-              <textarea
-                ref={resultRef}
-                className="sqlbind-textarea sqlbind-result-output"
-                readOnly
-                rows={6}
-                value={resultSql}
-                aria-label="바인딩된 SQL 결과"
-              />
-            </div>
-          )}
         </div>
       </div>
     </div>

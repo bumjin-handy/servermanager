@@ -13,7 +13,12 @@ Tauri 2 + React SSH Server Manager. Credentials are stored in **session memory o
 ## Product notes (keep docs in sync)
 
 - Switching servers keeps per-server workspaces mounted; do not tear down SSH/SFTP on selection change.
-- SQL Bind is client-side only (`src/lib/sqlBinder.ts` + `SqlBindPanel`); no Rust/network.
+- Toolbar: **Tool ▾** (로컬 탐색기, 파일 관리자, SQL Bind, 결재Tool, 결재INI설명), **Config**, **AI**, **로그 ▾** (로그수집, 로그 뷰어). Overlays are mutually exclusive per server.
+- Log viewer (`RemoteLogViewer`): hidden SSH `tail -F`, search/level filter, **로그선택** with checkboxes; copy/save/SQL Bind via context menu on the strip between checkbox and line number.
+- Log viewer → SQL Bind: selected lines copied and passed as `initialLogText` to `SqlBindPanel`.
+- SQL Bind is client-side only (`src/lib/sqlBinder.ts` + `SqlBindPanel`); no Rust/network. Binding result shown below integrated input; **연결 프로그램** opens temp file in VS Code or DBeaver.
 - Approval INI docs: user-selected local xlsx path in `store.json` only; do not commit the Excel/JSON (`ApprovalIniDocsPanel` + `approvalIniDocs.ts`).
-- Log download "open in editor" uses `open_local_with_editor` (Cursor / VS Code / EditPlus).
+- Log download / SQL Bind / log collect "open in editor" uses `open_local_with_editor` (Cursor / VS Code / EditPlus / DBeaver).
 - AI chat: OpenAI-compatible HTTP in Rust (`ai.rs`); API key session-only (not in `store.json`). Base URL/model in settings. Per-server overlay; attachments use SFTP read.
+- Config panel: remote SFTP config browser/editor; `configPath` favorites; `.properties` native↔ASCII via `propertiesNativeAscii.ts`.
+- Docs: keep `README.md` and `docs/SPEC.md` aligned when adding or changing user-facing features.

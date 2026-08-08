@@ -93,8 +93,10 @@ export const api = {
   localList: (path: string) =>
     invoke<RemoteFileEntry[]>("local_list", { path }),
   localParent: (path: string) => invoke<string>("local_parent", { path }),
-  openLocalWithEditor: (path: string, editor: "cursor" | "vscode" | "editplus") =>
-    invoke<void>("open_local_with_editor", { path, editor }),
+  openLocalWithEditor: (
+    path: string,
+    editor: "cursor" | "vscode" | "editplus" | "dbeaver",
+  ) => invoke<void>("open_local_with_editor", { path, editor }),
 
   setAiApiKey: (key: string) => invoke<void>("set_ai_api_key", { key }),
   clearAiApiKey: () => invoke<void>("clear_ai_api_key"),

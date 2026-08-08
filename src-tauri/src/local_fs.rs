@@ -139,7 +139,8 @@ pub fn parent_path(path: &str) -> String {
     }
 }
 
-/// Open a local path in an external editor. `editor`: `cursor` | `vscode` | `editplus`
+/// Open a local path in an external editor or app.
+/// `editor`: `cursor` | `vscode` | `editplus` | `dbeaver`
 pub fn open_with_editor(path: &Path, editor: &str) -> Result<()> {
     if !path.exists() {
         bail!("경로가 없습니다: {}", path.display());
@@ -148,7 +149,7 @@ pub fn open_with_editor(path: &Path, editor: &str) -> Result<()> {
     let candidates = editor_candidates(editor)?;
     let mut last_err = None;
     for program in candidates {
-        match spawn_detached(&program, path) {
+        match spawn_external(&program, path, editor) {
             Ok(()) => return Ok(()),
             Err(e) => last_err = Some(e),
         }
@@ -168,6 +169,7 @@ fn editor_label(editor: &str) -> &'static str {
         "cursor" => "Cursor",
         "vscode" => "VS Code",
         "editplus" => "EditPlus",
+        "dbeaver" => "DBeaver",
         _ => "에디터",
     }
 }
@@ -218,13 +220,23 @@ fn editor_candidates(editor: &str) -> Result<Vec<PathBuf>> {
                 }
             }
         }
+        "dbeaver" => {
+            list.push(PathBuf::from("dbeaver"));
+            #[cfg(windows)]
+            {
+                list.push(PathBuf::from(r"C:\Program Files\DBeaver\dbeaver.exe"));
+                if let Some(local) = dirs::data_local_dir() {
+                    list.push(local.join("DBeaver").join("dbeaver.exe"));
+                }
+            }
+        }
         _ => bail!("지원하지 않는 에디터입니다: {editor}"),
     }
     Ok(list)
 }
 
-fn spawn_detached(program: &Path, path: &Path) -> Result<()> {
-    // PATH에만 있는 이름(cursor/code)은 exists()가 false여도 시도한다.
+fn spawn_external(program: &Path, path: &Path, app: &str) -> Result<()> {
+    // PATH에만 있는 이름(cursor/code/dbeaver)은 exists()가 false여도 시도한다.
     let is_bare_name = program.components().count() == 1;
     if !is_bare_name && !program.exists() {
         bail!("없음: {}", program.display());
@@ -234,22 +246,29 @@ fn spawn_detached(program: &Path, path: &Path) -> Result<()> {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        // .cmd 런처(cursor/code)는 cmd start로 띄워야 안정적이다.
-        Command::new("cmd")
-            .args(["/C", "start", "", "/B"])
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "start", "", "/B"])
             .arg(program)
-            .arg(path)
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
+            .creation_flags(CREATE_NO_WINDOW);
+        if app == "dbeaver" {
+            cmd.arg("-f").arg(path);
+        } else {
+            cmd.arg(path);
+        }
+        cmd.spawn()
             .with_context(|| format!("실행 실패: {}", program.display()))?;
         return Ok(());
     }
 
     #[cfg(not(windows))]
     {
-        Command::new(program)
-            .arg(path)
-            .spawn()
+        let mut cmd = Command::new(program);
+        if app == "dbeaver" {
+            cmd.args(["-f", &path.to_string_lossy()]);
+        } else {
+            cmd.arg(path);
+        }
+        cmd.spawn()
             .with_context(|| format!("실행 실패: {}", program.display()))?;
         Ok(())
     }

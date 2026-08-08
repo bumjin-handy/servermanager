@@ -6,6 +6,7 @@
  *  - Stream via `tail -F` over SSH, rendered as plain text lines
  *  - Search (highlight + jump), log-level filter, timestamp toggle
  *  - Line-count badge, auto-scroll toggle, clear, fullscreen, download
+ *  - Line selection mode: checkboxes, right-click context menu for copy/save/SQL Bind
  */
 import {
   useCallback,
@@ -13,6 +14,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
 } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open as dialogOpen } from "@tauri-apps/plugin-dialog";
@@ -38,6 +40,7 @@ interface LogLine {
 interface Props {
   server: Server;
   onClose: () => void;
+  onSendToSqlBind?: (text: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +94,7 @@ function levelPassesFilter(lineLevel: LogLevel, filter: LogLevel): boolean {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export function RemoteLogViewer({ server, onClose }: Props) {
+export function RemoteLogViewer({ server, onClose, onSendToSqlBind }: Props) {
   // ── state ──────────────────────────────────────────────────────────────
   const [selectedPath, setSelectedPath] = useState<string>(() =>
     server.logCollectPaths?.[0] ?? ""
@@ -108,6 +111,9 @@ export function RemoteLogViewer({ server, onClose }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [statusErr, setStatusErr] = useState(false);
   const [matchIdx, setMatchIdx] = useState(0);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
   // SSH session id for streaming
   const sessionIdRef = useRef<string | null>(null);
@@ -132,6 +138,11 @@ export function RemoteLogViewer({ server, onClose }: Props) {
     [filteredLines, searchLower]
   );
 
+  const selectedLines = useMemo(
+    () => filteredLines.filter((l) => selectedIds.has(l.id)),
+    [filteredLines, selectedIds]
+  );
+
   // ── auto-scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (autoScroll && listRef.current) {
@@ -152,6 +163,29 @@ export function RemoteLogViewer({ server, onClose }: Props) {
     );
     setMatchIdx(0);
   }, [searchLower]);
+
+  // Drop selections for lines that no longer exist
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const lineIds = new Set(lines.map((l) => l.id));
+      const next = new Set([...prev].filter((id) => lineIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [lines]);
+
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [ctxMenu]);
 
   // ── stream controls ──────────────────────────────────────────────────────
   const stopStream = useCallback(async () => {
@@ -251,22 +285,117 @@ export function RemoteLogViewer({ server, onClose }: Props) {
     };
   }, [stopStream]);
 
-  // ── download ──────────────────────────────────────────────────────────────
-  const downloadLog = async () => {
-    if (lines.length === 0) return;
-    const content = filteredLines.map((l) => l.text).join("\n");
+  const lineContent = (line: LogLine) => line.text;
+
+  const writeTextToClipboard = async (content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      return true;
+    } catch {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = content;
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textArea);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+  };
+
+  const saveTextToFile = async (content: string, title: string) => {
     const savePath = await dialogOpen({
       directory: false,
       multiple: false,
       filters: [{ name: "Log", extensions: ["log", "txt"] }],
-      title: "로그 저장",
+      title,
     });
     if (typeof savePath !== "string") return;
+    await api.localWriteText(toNativeLocalPath(savePath), content);
+  };
+
+  // ── download ──────────────────────────────────────────────────────────────
+  const downloadLog = async () => {
+    if (lines.length === 0) return;
+    const content = filteredLines.map(lineContent).join("\n");
     try {
-      await api.localWriteText(toNativeLocalPath(savePath), content);
+      await saveTextToFile(content, "로그 저장");
     } catch (e) {
       window.alert(String(e));
     }
+  };
+
+  const toggleSelectionMode = () => {
+    setSelectionMode((v) => {
+      if (v) {
+        setSelectedIds(new Set());
+        setCtxMenu(null);
+      }
+      return !v;
+    });
+  };
+
+  const toggleLineSelection = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(filteredLines.map((l) => l.id)));
+  };
+
+  const copySelectedLines = async () => {
+    if (selectedLines.length === 0) return;
+    const content = selectedLines.map(lineContent).join("\n");
+    const ok = await writeTextToClipboard(content);
+    if (!ok) {
+      window.alert("클립보드 복사에 실패했습니다.");
+      return;
+    }
+    setStatus(`${selectedLines.length}줄 복사됨`);
+    setStatusErr(false);
+  };
+
+  const saveSelectedLines = async () => {
+    if (selectedLines.length === 0) return;
+    const content = selectedLines.map(lineContent).join("\n");
+    try {
+      await saveTextToFile(content, "선택 로그 저장");
+    } catch (e) {
+      window.alert(String(e));
+    }
+  };
+
+  const sendSelectedToSqlBind = async () => {
+    if (selectedLines.length === 0 || !onSendToSqlBind) return;
+    const content = selectedLines.map(lineContent).join("\n");
+    const ok = await writeTextToClipboard(content);
+    if (!ok) {
+      window.alert("클립보드 복사에 실패했습니다.");
+      return;
+    }
+    onSendToSqlBind(content);
+  };
+
+  const onSelectionContextMenu = (e: MouseEvent) => {
+    if (!selectionMode || selectedIds.size === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const runCtxAction = (action: () => void | Promise<void>) => {
+    setCtxMenu(null);
+    void action();
   };
 
   // ── search navigation ────────────────────────────────────────────────────
@@ -297,11 +426,11 @@ export function RemoteLogViewer({ server, onClose }: Props) {
     );
   };
 
-  const renderLine = (line: LogLine) => {
+  const renderLine = (line: LogLine, index: number) => {
     const isCurrentMatch =
       searchLower &&
       line.matchesSearch &&
-      matchLines[matchIdx]?.i === filteredLines.indexOf(line);
+      matchLines[matchIdx]?.i === index;
 
     const display = showTs && line.ts
       ? line.text
@@ -309,14 +438,34 @@ export function RemoteLogViewer({ server, onClose }: Props) {
         ? line.text.slice(line.ts.length).trimStart()
         : line.text;
 
+    const isSelected = selectedIds.has(line.id);
+
     return (
       <div
         key={line.id}
-        className={`rlv-line${isCurrentMatch ? " rlv-line-current" : ""}`}
+        className={`rlv-line${isCurrentMatch ? " rlv-line-current" : ""}${isSelected ? " rlv-line-selected" : ""}${selectionMode ? " rlv-line-selectable" : ""}`}
         style={{ color: LEVEL_COLORS[line.level] }}
         title={line.raw !== line.text ? line.raw : undefined}
+        onClick={selectionMode ? () => toggleLineSelection(line.id) : undefined}
       >
-        <span className="rlv-line-num">{filteredLines.indexOf(line) + 1}</span>
+        {selectionMode && (
+          <>
+            <input
+              type="checkbox"
+              className="rlv-line-check"
+              checked={isSelected}
+              onChange={() => toggleLineSelection(line.id)}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`로그 ${index + 1}행 선택`}
+            />
+            <span
+              className="rlv-line-ctx-zone"
+              title="우클릭: 복사·저장·SQL Bind"
+              onContextMenu={onSelectionContextMenu}
+            />
+          </>
+        )}
+        <span className="rlv-line-num">{index + 1}</span>
         <span className="rlv-line-text">{highlightText(display)}</span>
       </div>
     );
@@ -391,6 +540,34 @@ export function RemoteLogViewer({ server, onClose }: Props) {
               <span className="muted"> / {lines.length}</span>
             )}
           </span>
+
+          <div className="rlv-select-group">
+            <button
+              className={`rlv-select-toggle${selectionMode ? " is-active" : ""}`}
+              title={selectionMode ? "로그 선택 종료" : "로그 선택"}
+              onClick={toggleSelectionMode}
+            >
+              로그선택
+            </button>
+            {selectionMode && (
+              <span className="rlv-line-badge">
+                선택: <strong>{selectedIds.size}</strong>
+              </span>
+            )}
+          </div>
+
+          {selectionMode && (
+            <button
+              className="rlv-select-action"
+              title="표시된 로그 전체 선택"
+              disabled={filteredLines.length === 0}
+              onClick={selectAllVisible}
+            >
+              전체선택
+            </button>
+          )}
+
+          <div className="rlv-toolbar-sep" />
 
           {/* search */}
           <div className="rlv-search-wrap">
@@ -542,6 +719,7 @@ export function RemoteLogViewer({ server, onClose }: Props) {
             const { scrollTop, scrollHeight, clientHeight } = listRef.current;
             const atBottom = scrollHeight - scrollTop - clientHeight < 40;
             if (!atBottom && autoScroll) setAutoScroll(false);
+            setCtxMenu(null);
           }}
         >
           <div className="rlv-lines-body">
@@ -554,7 +732,7 @@ export function RemoteLogViewer({ server, onClose }: Props) {
                     : "로그 경로를 선택하거나 입력하세요"}
               </div>
             ) : (
-              filteredLines.map((l) => renderLine(l))
+              filteredLines.map((l, i) => renderLine(l, i))
             )}
           </div>
         </div>
@@ -567,6 +745,38 @@ export function RemoteLogViewer({ server, onClose }: Props) {
           </div>
         )}
       </div>
+
+      {ctxMenu && (
+        <div
+          className="context-menu rlv-ctx-menu"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => runCtxAction(copySelectedLines)}
+          >
+            복사
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => runCtxAction(saveSelectedLines)}
+          >
+            저장
+          </button>
+          {onSendToSqlBind && (
+            <button
+              type="button"
+              className="context-menu-item"
+              onClick={() => runCtxAction(sendSelectedToSqlBind)}
+            >
+              SQL Bind
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

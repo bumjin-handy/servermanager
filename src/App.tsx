@@ -92,6 +92,7 @@ function App() {
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showSqlBind, setShowSqlBind] = useState(false);
+  const [sqlBindInitialLog, setSqlBindInitialLog] = useState<string | null>(null);
   const [showApprovalTool, setShowApprovalTool] = useState(false);
   const [showApprovalIniDocs, setShowApprovalIniDocs] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
@@ -522,6 +523,16 @@ function App() {
     }
   };
 
+  const openSqlBindWithLog = (text: string) => {
+    setSqlBindInitialLog(text);
+    setShowSqlBind(true);
+  };
+
+  const closeSqlBind = () => {
+    setShowSqlBind(false);
+    setSqlBindInitialLog(null);
+  };
+
   const closeServerWorkspace = async (serverId: string) => {
     const closing = workspaces[serverId];
     if (closing) {
@@ -661,6 +672,7 @@ function App() {
                   logViewerOpen: false,
                 }));
               }}
+              onSendToSqlBind={openSqlBindWithLog}
             />
           </div>
         )}
@@ -827,6 +839,7 @@ function App() {
                         role="menuitem"
                         onClick={() => {
                           setToolMenuOpen(false);
+                          setSqlBindInitialLog(null);
                           setShowSqlBind(true);
                         }}
                       >
@@ -995,7 +1008,12 @@ function App() {
         />
       )}
 
-      {showSqlBind && <SqlBindPanel onClose={() => setShowSqlBind(false)} />}
+      {showSqlBind && (
+        <SqlBindPanel
+          initialLogText={sqlBindInitialLog}
+          onClose={closeSqlBind}
+        />
+      )}
 
       {showApprovalTool && selected && (
         <ApprovalToolPanel
