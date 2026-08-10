@@ -125,6 +125,19 @@ impl Store {
         Ok(())
     }
 
+    pub fn list_linked_programs(&self) -> Vec<crate::models::LinkedProgram> {
+        self.data.linked_programs.clone()
+    }
+
+    pub fn save_linked_programs(
+        &mut self,
+        programs: Vec<crate::models::LinkedProgram>,
+    ) -> Result<Vec<crate::models::LinkedProgram>> {
+        self.data.linked_programs = programs;
+        self.persist()?;
+        Ok(self.data.linked_programs.clone())
+    }
+
     /// Directory used when suggesting per-server env files.
     pub fn resolve_default_env_dir(&self) -> PathBuf {
         let configured = self.data.default_env_dir.trim();

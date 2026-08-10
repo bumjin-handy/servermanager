@@ -16,6 +16,7 @@ import { ConfigPanel } from "./components/ConfigPanel";
 import { AiChatPanel } from "./components/AiChatPanel";
 import { ServerModal } from "./components/ServerModal";
 import { SettingsModal } from "./components/SettingsModal";
+import { LinkedProgramModal } from "./components/LinkedProgramModal";
 import { SqlBindPanel } from "./components/SqlBindPanel";
 import { ApprovalToolPanel } from "./components/ApprovalToolPanel";
 import { ApprovalIniDocsPanel } from "./components/ApprovalIniDocsPanel";
@@ -91,12 +92,14 @@ function App() {
   const [showServerModal, setShowServerModal] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showLinkedPrograms, setShowLinkedPrograms] = useState(false);
   const [showSqlBind, setShowSqlBind] = useState(false);
   const [sqlBindInitialLog, setSqlBindInitialLog] = useState<string | null>(null);
   const [showApprovalTool, setShowApprovalTool] = useState(false);
   const [showApprovalIniDocs, setShowApprovalIniDocs] = useState(false);
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [logMenuOpen, setLogMenuOpen] = useState(false);
+  const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [bootError, setBootError] = useState<string | null>(null);
 
   const [secretPrompt, setSecretPrompt] = useState<{
@@ -759,11 +762,55 @@ function App() {
             </button>
           ))}
         </div>
-        <div className="sidebar-footer">
-          <button className="btn" type="button" onClick={() => setShowSettings(true)}>
-            설정
-          </button>
-        </div>
+        {!selected && (
+          <div className="sidebar-footer">
+            <div className="toolbar-menu sidebar-settings-menu">
+              <button
+                className={`btn${settingsMenuOpen ? " primary" : ""}`}
+                type="button"
+                aria-expanded={settingsMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setSettingsMenuOpen((open) => !open)}
+              >
+                설정 ▾
+              </button>
+              {settingsMenuOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="toolbar-menu-backdrop"
+                    aria-label="메뉴 닫기"
+                    onClick={() => setSettingsMenuOpen(false)}
+                  />
+                  <div className="toolbar-menu-dropdown" role="menu">
+                    <button
+                      type="button"
+                      className="toolbar-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setSettingsMenuOpen(false);
+                        setShowSettings(true);
+                      }}
+                    >
+                      앱 설정
+                    </button>
+                    <button
+                      type="button"
+                      className="toolbar-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setSettingsMenuOpen(false);
+                        setShowLinkedPrograms(true);
+                      }}
+                    >
+                      연결 프로그램 관리
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </aside>
 
       <main className="main">
@@ -798,7 +845,10 @@ function App() {
                   type="button"
                   aria-expanded={toolMenuOpen}
                   aria-haspopup="menu"
-                  onClick={() => setToolMenuOpen((open) => !open)}
+                  onClick={() => {
+                    setToolMenuOpen((open) => !open);
+                    setSettingsMenuOpen(false);
+                  }}
                 >
                   Tool ▾
                 </button>
@@ -912,6 +962,7 @@ function App() {
                   onClick={() => {
                     const next = !logMenuOpen;
                     setLogMenuOpen(next);
+                    setSettingsMenuOpen(false);
                     if (next) {
                       patchSelected((current) => ({
                         ...current,
@@ -971,6 +1022,55 @@ function App() {
                   </>
                 )}
               </div>
+              <div className="toolbar-menu">
+                <button
+                  className={`btn${settingsMenuOpen || showSettings || showLinkedPrograms ? " primary" : ""}`}
+                  type="button"
+                  aria-expanded={settingsMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => {
+                    setSettingsMenuOpen((open) => !open);
+                    setToolMenuOpen(false);
+                    setLogMenuOpen(false);
+                  }}
+                >
+                  설정 ▾
+                </button>
+                {settingsMenuOpen && (
+                  <>
+                    <button
+                      type="button"
+                      className="toolbar-menu-backdrop"
+                      aria-label="메뉴 닫기"
+                      onClick={() => setSettingsMenuOpen(false)}
+                    />
+                    <div className="toolbar-menu-dropdown" role="menu">
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setSettingsMenuOpen(false);
+                          setShowSettings(true);
+                        }}
+                      >
+                        앱 설정
+                      </button>
+                      <button
+                        type="button"
+                        className="toolbar-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setSettingsMenuOpen(false);
+                          setShowLinkedPrograms(true);
+                        }}
+                      >
+                        연결 프로그램 관리
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button className="btn" type="button" onClick={addFavoritesPane}>
                 즐겨찾기
               </button>
@@ -1006,6 +1106,10 @@ function App() {
           onClose={() => setShowSettings(false)}
           onSaved={() => {}}
         />
+      )}
+
+      {showLinkedPrograms && (
+        <LinkedProgramModal mode="manage" onClose={() => setShowLinkedPrograms(false)} />
       )}
 
       {showSqlBind && (

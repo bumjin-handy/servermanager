@@ -12,7 +12,7 @@ use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use models::{
-    AuthType, Favorite, FavoriteType, RemoteFileEntry,
+    AuthType, Favorite, FavoriteType, LinkedProgram, RemoteFileEntry,
     RemoteTextContent, Server,
 };
 use sftp::SftpManager;
@@ -556,6 +556,35 @@ fn open_local_with_editor(path: String, editor: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_local_with_program(
+    path: String,
+    executable: String,
+    args: Vec<String>,
+) -> Result<(), String> {
+    local_fs::open_with_program(
+        std::path::Path::new(&path),
+        std::path::Path::new(&executable),
+        &args,
+    )
+    .map_err(err_string)
+}
+
+#[tauri::command]
+fn list_linked_programs(state: State<'_, AppState>) -> Result<Vec<LinkedProgram>, String> {
+    let store = state.store.lock().map_err(|e| e.to_string())?;
+    Ok(store.list_linked_programs())
+}
+
+#[tauri::command]
+fn save_linked_programs(
+    state: State<'_, AppState>,
+    programs: Vec<LinkedProgram>,
+) -> Result<Vec<LinkedProgram>, String> {
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    store.save_linked_programs(programs).map_err(err_string)
+}
+
+#[tauri::command]
 fn get_approval_ini_docs_path(state: State<'_, AppState>) -> Result<String, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     Ok(store.get_approval_ini_docs_path())
@@ -693,6 +722,9 @@ pub fn run() {
             local_list,
             local_parent,
             open_local_with_editor,
+            open_local_with_program,
+            list_linked_programs,
+            save_linked_programs,
             get_approval_ini_docs_path,
             set_approval_ini_docs_path,
             read_local_file_base64,

@@ -188,6 +188,15 @@ button {
   gap: 8px;
 }
 
+.sidebar-settings-menu {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-settings-menu > .btn {
+  width: 100%;
+}
+
 .sidebar-footer button {
   flex: 1;
   height: 32px;
@@ -1506,8 +1515,9 @@ button {
   gap: 6px;
 }
 
-.sqlbind-result-title h4 {
+.sqlbind-result-header h4 {
   margin: 0;
+  font-size: 13px;
 }
 
 .sqlbind-external-menu-wrap {
@@ -1525,6 +1535,11 @@ button {
   left: 0;
   z-index: 120;
   min-width: 160px;
+}
+
+.sqlbind-external-menu-fixed {
+  position: fixed;
+  z-index: 400;
 }
 
 .sqlbind-result-inline {
@@ -1733,6 +1748,109 @@ button {
 .sqlbind-result-output {
   min-height: 120px;
   background: #0d1117;
+}
+
+/* 연결 프로그램 */
+.linked-program-modal {
+  width: min(720px, 100%);
+  max-height: min(90vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.linked-program-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.linked-program-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.linked-program-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.linked-program-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.linked-program-name {
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.linked-program-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linked-program-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.linked-program-name-input {
+  flex: 1;
+  min-width: 120px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.linked-program-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.linked-program-msg {
+  margin: 0;
+}
+
+.linked-program-error-detail {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.linked-program-actions {
+  padding: 0 16px 16px;
+}
+
+.context-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
 }
 
 /* 결재Tool */

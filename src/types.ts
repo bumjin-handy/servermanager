@@ -34,6 +34,17 @@ export interface AppSettingsView {
   aiModel: string;
 }
 
+export type LinkedProgramPreset = "cursor" | "vscode" | "editplus" | "dbeaver";
+
+export interface LinkedProgram {
+  id: string;
+  name: string;
+  executablePath: string;
+  preset: LinkedProgramPreset | "";
+  argTemplate: string;
+  hidden?: boolean;
+}
+
 export type ChatRole = "user" | "assistant" | "system";
 
 export interface ChatMessage {

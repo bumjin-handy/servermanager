@@ -71,6 +71,9 @@ pub struct AppData {
     /// Model name for chat completions (non-secret).
     #[serde(default = "default_ai_model")]
     pub ai_model: String,
+    /// User-configured external programs (editors, DBeaver, etc.).
+    #[serde(default)]
+    pub linked_programs: Vec<LinkedProgram>,
 }
 
 fn default_ai_base_url() -> String {
@@ -79,6 +82,28 @@ fn default_ai_base_url() -> String {
 
 fn default_ai_model() -> String {
     "moonshotai/kimi-k3-free".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedProgram {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub executable_path: String,
+    /// Built-in resolver key: cursor | vscode | editplus | dbeaver
+    #[serde(default)]
+    pub preset: String,
+    /// Argument template; `{path}` is replaced with the target file path.
+    #[serde(default = "default_linked_program_arg_template")]
+    pub arg_template: String,
+    /// When true, preset entry is hidden from the linked program list.
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+fn default_linked_program_arg_template() -> String {
+    "{path}".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

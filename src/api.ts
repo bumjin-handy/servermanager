@@ -3,6 +3,7 @@ import type {
   Favorite,
   FavoriteType,
   AppSettingsView,
+  LinkedProgram,
   RemoteFileEntry,
   RemoteTextContent,
   Server,
@@ -97,6 +98,11 @@ export const api = {
     path: string,
     editor: "cursor" | "vscode" | "editplus" | "dbeaver",
   ) => invoke<void>("open_local_with_editor", { path, editor }),
+  openLocalWithProgram: (path: string, executable: string, args: string[]) =>
+    invoke<void>("open_local_with_program", { path, executable, args }),
+  listLinkedPrograms: () => invoke<LinkedProgram[]>("list_linked_programs"),
+  saveLinkedPrograms: (programs: LinkedProgram[]) =>
+    invoke<LinkedProgram[]>("save_linked_programs", { programs }),
 
   setAiApiKey: (key: string) => invoke<void>("set_ai_api_key", { key }),
   clearAiApiKey: () => invoke<void>("clear_ai_api_key"),

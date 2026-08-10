@@ -50,7 +50,7 @@ export function SettingsModal({ onClose, onSaved }: Props) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={save}>
-        <h3>설정</h3>
+        <h3>앱 설정</h3>
         <div className="form-grid">
           <div className="form-field">
             <label>.env 기본 디렉토리</label>

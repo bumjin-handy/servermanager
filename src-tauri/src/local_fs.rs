@@ -235,6 +235,45 @@ fn editor_candidates(editor: &str) -> Result<Vec<PathBuf>> {
     Ok(list)
 }
 
+pub fn open_with_program(file: &Path, executable: &Path, args: &[String]) -> Result<()> {
+    if !file.exists() {
+        bail!("경로가 없습니다: {}", file.display());
+    }
+    if !executable.exists() {
+        bail!("실행 파일이 없습니다: {}", executable.display());
+    }
+    spawn_program(executable, args)
+}
+
+fn spawn_program(program: &Path, args: &[String]) -> Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "start", "", "/B"])
+            .arg(program)
+            .creation_flags(CREATE_NO_WINDOW);
+        for arg in args {
+            cmd.arg(arg);
+        }
+        cmd.spawn()
+            .with_context(|| format!("실행 실패: {}", program.display()))?;
+        return Ok(());
+    }
+
+    #[cfg(not(windows))]
+    {
+        let mut cmd = Command::new(program);
+        for arg in args {
+            cmd.arg(arg);
+        }
+        cmd.spawn()
+            .with_context(|| format!("실행 실패: {}", program.display()))?;
+        Ok(())
+    }
+}
+
 fn spawn_external(program: &Path, path: &Path, app: &str) -> Result<()> {
     // PATH에만 있는 이름(cursor/code/dbeaver)은 exists()가 false여도 시도한다.
     let is_bare_name = program.components().count() == 1;

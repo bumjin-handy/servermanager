@@ -5,6 +5,7 @@ import {
   useState,
   type ChangeEvent as ReactChangeEvent,
   type ClipboardEvent as ReactClipboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   EXAMPLE_LOG,
@@ -22,8 +23,13 @@ import {
 } from "../lib/sqlBinder";
 import { api } from "../api";
 import { joinLocal, toNativeLocalPath } from "./fileManagerShared";
+import { LinkedProgramModal } from "./LinkedProgramModal";
+import {
+  loadLinkedPrograms,
+  openWithLinkedProgram,
+} from "../lib/linkedPrograms";
+import type { LinkedProgram } from "../types";
 
-type ExternalApp = "vscode" | "dbeaver";
 type ExternalMenuTarget = "log" | "result";
 
 interface Props {
@@ -66,6 +72,14 @@ export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
   const [importedFileName, setImportedFileName] = useState<string | null>(null);
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [externalMenuTarget, setExternalMenuTarget] = useState<ExternalMenuTarget | null>(null);
+  const [externalMenuPos, setExternalMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [linkedPrograms, setLinkedPrograms] = useState<LinkedProgram[]>([]);
+  const [programPicker, setProgramPicker] = useState<{
+    filePath: string;
+    programId: string | null;
+    error: string | null;
+  } | null>(null);
+  const [programManageOpen, setProgramManageOpen] = useState(false);
   const resultRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logExternalMenuRef = useRef<HTMLDivElement>(null);
@@ -235,12 +249,17 @@ export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
   }, [initialLogText]);
 
   useEffect(() => {
+    void loadLinkedPrograms().then(setLinkedPrograms);
+  }, []);
+
+  useEffect(() => {
     if (!externalMenuTarget) return;
     const onDocClick = (e: MouseEvent) => {
       const ref =
         externalMenuTarget === "log" ? logExternalMenuRef : resultExternalMenuRef;
       if (!ref.current?.contains(e.target as Node)) {
         setExternalMenuTarget(null);
+        setExternalMenuPos(null);
       }
     };
     document.addEventListener("mousedown", onDocClick);
@@ -373,14 +392,38 @@ export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
     return filePath;
   };
 
-  const openWithExternal = async (app: ExternalApp) => {
+  const runLinkedProgram = async (program: LinkedProgram) => {
     setExternalMenuTarget(null);
+    setExternalMenuPos(null);
     try {
       const filePath = await ensureExternalFile();
-      await api.openLocalWithEditor(toNativeLocalPath(filePath), app);
+      const result = await openWithLinkedProgram(program, filePath);
+      if (result.ok) return;
+      setProgramPicker({
+        filePath: result.filePath,
+        programId: result.program.id,
+        error: result.error,
+      });
     } catch (e) {
       setError(String(e));
     }
+  };
+
+  const toggleExternalMenu = (
+    target: ExternalMenuTarget,
+    e: ReactMouseEvent<HTMLButtonElement>,
+    disabled = false,
+  ) => {
+    if (disabled) return;
+    e.stopPropagation();
+    if (externalMenuTarget === target) {
+      setExternalMenuTarget(null);
+      setExternalMenuPos(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setExternalMenuPos({ top: rect.bottom + 4, left: rect.right });
+    setExternalMenuTarget(target);
   };
 
   const renderExternalMenu = (target: ExternalMenuTarget, disabled = false) => (
@@ -390,54 +433,70 @@ export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
     >
       <button
         type="button"
-        className="icon-btn sqlbind-external-btn"
+        className={`${target === "result" ? "btn" : "icon-btn sqlbind-external-btn"}`}
         title="연결 프로그램으로 열기"
         aria-label="연결 프로그램으로 열기"
         aria-expanded={externalMenuTarget === target}
+        aria-haspopup="menu"
         disabled={disabled}
-        onClick={(e) => {
-          e.stopPropagation();
-          setExternalMenuTarget((v) => (v === target ? null : target));
-        }}
+        onClick={(e) => toggleExternalMenu(target, e, disabled)}
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-          <polyline points="15 3 21 3 21 9" />
-          <line x1="10" y1="14" x2="21" y2="3" />
-        </svg>
+        {target === "result" ? (
+          <>연결 ↗</>
+        ) : (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        )}
       </button>
-      {externalMenuTarget === target && (
+      {externalMenuTarget === target && externalMenuPos && (
         <div
-          className="context-menu sqlbind-external-menu"
+          className="context-menu sqlbind-external-menu sqlbind-external-menu-fixed"
           role="menu"
+          style={{
+            position: "fixed",
+            top: externalMenuPos.top,
+            left: externalMenuPos.left,
+            transform: "translateX(-100%)",
+          }}
           onClick={(e) => e.stopPropagation()}
         >
+          {linkedPrograms.map((program) => (
+            <button
+              key={program.id}
+              type="button"
+              className="context-menu-item"
+              role="menuitem"
+              onClick={() => void runLinkedProgram(program)}
+            >
+              {program.name}로 열기
+            </button>
+          ))}
+          <div className="context-menu-sep" role="separator" />
           <button
             type="button"
             className="context-menu-item"
             role="menuitem"
-            onClick={() => void openWithExternal("vscode")}
+            onClick={() => {
+              setExternalMenuTarget(null);
+              setExternalMenuPos(null);
+              setProgramManageOpen(true);
+            }}
           >
-            VS Code로 열기
-          </button>
-          <button
-            type="button"
-            className="context-menu-item"
-            role="menuitem"
-            onClick={() => void openWithExternal("dbeaver")}
-          >
-            DBeaver로 열기
+            연결 프로그램 관리…
           </button>
         </div>
       )}
@@ -449,11 +508,9 @@ export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
     return (
       <div className="sqlbind-result sqlbind-result-inline">
         <div className="sqlbind-result-header">
-          <div className="sqlbind-result-title">
-            <h4>바인딩 결과</h4>
-            {renderExternalMenu("result")}
-          </div>
+          <h4>바인딩 결과</h4>
           <div className="sqlbind-actions">
+            {renderExternalMenu("result")}
             <button type="button" className="btn primary" onClick={() => void copyResult()}>
               {copyLabel}
             </button>
@@ -472,7 +529,8 @@ export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <>
+      <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal sqlbind-modal"
         role="dialog"
@@ -719,6 +777,29 @@ export function SqlBindPanel({ onClose, initialLogText = null }: Props) {
 
         </div>
       </div>
-    </div>
+      </div>
+      {programPicker && (
+        <LinkedProgramModal
+          mode="pick"
+          filePath={programPicker.filePath}
+          initialProgramId={programPicker.programId}
+          errorMessage={programPicker.error}
+          onClose={() => setProgramPicker(null)}
+          onOpened={() => {
+            setProgramPicker(null);
+            void loadLinkedPrograms().then(setLinkedPrograms);
+          }}
+        />
+      )}
+      {programManageOpen && (
+        <LinkedProgramModal
+          mode="manage"
+          onClose={() => {
+            setProgramManageOpen(false);
+            void loadLinkedPrograms().then(setLinkedPrograms);
+          }}
+        />
+      )}
+    </>
   );
 }

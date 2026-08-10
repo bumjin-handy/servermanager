@@ -21,9 +21,9 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 
 ## 2. 레이아웃·셸
 
-- **좌측**: 서버 목록 (추가 / 선택 / 더블클릭 새 터미널 / 우클릭 편집 / 삭제), 하단 **설정**
+- **좌측**: 서버 목록 (추가 / 선택 / 더블클릭 새 터미널 / 우클릭 편집 / 삭제). 서버 미선택 시 하단 **설정 ▾**
 - **우측**: 선택한 서버의 워크스페이스 (툴바 + 패널). 서버를 바꿔도 다른 서버 워크스페이스는 **언마운트하지 않음** (숨김만)
-- **설정**: 기본 `.env` 디렉터리 등 앱 전역 설정
+- **설정 ▾**: **앱 설정** (`.env` 기본 디렉터리, AI Base URL/모델) / **연결 프로그램 관리** (VS Code·DBeaver 등 실행 파일 경로)
 - 다크 테마 셸 (터미널 중심)
 
 ### 툴바 (서버 선택 시)
@@ -33,6 +33,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 - **Config** — 원격 설정 파일 패널 (토글)
 - **AI** — 서버별 AI 채팅 패널 (토글)
 - **로그 ▾**: 로그수집 (수집 중 ●) / 로그 뷰어
+- **설정 ▾**: 앱 설정 / 연결 프로그램 관리
 - **즐겨찾기**
 - **서버 삭제**
 
@@ -216,7 +217,7 @@ Windows 우선 **Tauri 2 + React + TypeScript** 데스크톱 앱. SSH 서버를 
 - **바인딩 결과**는 통합 입력란 바로 아래 표시
 - DB별 날짜 리터럴: Oracle `TO_DATE`, MySQL `STR_TO_DATE`, PostgreSQL `TIMESTAMP`/`DATE`
 - 파라미터 표에서 값·타입 수정 후 재바인딩, 결과 클립보드 복사
-- **연결 프로그램** (↗): 바인딩 결과(또는 통합 입력)를 `~/sqlbind/` 임시 파일로 저장 후 **VS Code** / **DBeaver**로 열기 (`open_local_with_editor`)
+- **연결 프로그램** (↗): 바인딩 결과(또는 통합 입력)를 `~/sqlbind/` 임시 파일로 저장 후 등록된 로컬 프로그램으로 열기 (기본: VS Code, DBeaver, Cursor, EditPlus). 실행 실패 시 **연결 프로그램 선택** 모달 — **설정 ▾ → 연결 프로그램 관리**에서 경로 등록·커스텀 추가 (`store.json` `linkedPrograms`, Rust `open_local_with_program` / `open_local_with_editor`)
 
 ### 소스
 
@@ -325,7 +326,7 @@ Tool ▾ → **결재INI설명**. 전자결재 INI/설정 옵션 레퍼런스 �
 - 로그 뷰어는 메모리에 최대 약 5000줄 유지
 - 로그 수집·뷰어는 원격 셸의 `$HOME`·현재 권한에 의존 (`tail -F`, `grep`, `tee` 등)
 - SQL Bind의 `?` 치환은 문자열/주석을 구분하지 않음 (디버그 로그용)
-- Cursor / VS Code / EditPlus / DBeaver 미설치 시 **연결 프로그램** 실행 실패 알림
+- Cursor / VS Code / EditPlus / DBeaver 미설치·경로 미등록 시 **연결 프로그램 선택** 모달 표시
 
 ---
 

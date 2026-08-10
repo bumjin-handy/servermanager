@@ -37,7 +37,7 @@ npm run tauri dev
 | 파일 관리자 | 우측 전체 오버레이, 로컬(전체 드라이브) ↔ 원격(SFTP), DnD·경로 즐겨찾기, 원격 텍스트 보기 |
 | 로그 수집 | 다중 `tail -F` 병렬(+`tee`), `grep -E` 필터·색 강조·메모(`memo.txt`), `$HOME/logs/{stamp}/`, 종료 후 SFTP 다운로드, 에디터로 열기 |
 | 로그 뷰어 | `tail -F` 스트리밍·검색·레벨 필터·다운로드; **로그선택** 모드에서 줄 선택 후 체크박스~줄번호 사이 우클릭 → 복사/저장/SQL Bind |
-| SQL Bind | MyBatis 로그/`?` 파라미터를 DB별 리터럴 SQL로 바인딩 (클라이언트 전용); 로그 뷰어 연동, VS Code/DBeaver로 열기 |
+| SQL Bind | MyBatis 로그/`?` 파라미터를 DB별 리터럴 SQL로 바인딩 (클라이언트 전용); 로그 뷰어 연동, 연결 프로그램으로 열기 (설정에서 경로 관리) |
 | 결재Tool | 결재함 objectId로 원격 sancbox 경로 탐색·다운로드 |
 | 결재INI설명 | 로컬 Approval INI Excel 불러오기(경로만 기억)·시트 열람·검색 |
 
